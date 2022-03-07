@@ -194,26 +194,46 @@ fn smm5(index: i32, N: &mut Vec<Node>) -> u32 {
     .0;
 }
 
-// fn build_bitfield(N: &mut Vec<Node>) {
-//     for (i, el) in N.iter().enumerate() {
-//         if i >= RELATIVE_INDEX {
-//             for li in &el.list {
-//                 if li.cref == -1 {
-//                     el.bf[0] = addsub_bit(el.bf[0], li.ind, 1);
-//                 }
-//                 if li.cref == -2 {
-//                     el.bf[1] = addsub_bit(el.bf[1], li.ind, 1);
-//                 }
-//                 if (li.cref == -1) && (li.add_const == 0) {
-//                     el.bf[2] = addsub_bit(el.bf[2], li.crind, 1);
-//                 }
-//                 if (li.cref == -1) && (li.add_const != 0) {
-//                     el.bf[3] = addsub_bit(el.bf[3], li.crind, 1);
-//                 }
-//             }
-//         }
-//     }
-// }
+fn build_bitfield(N: &mut Vec<Node>) {
+    let mut count = 0;
+    for el in N {
+        if count >= RELATIVE_INDEX {
+            let mut list_iter = el.list.iter();
+            while let Some(li) = list_iter.next() {
+                // if count == 20 {
+                //     println!("{:?}", li);
+                // }
+                if li.cref == -1 {
+                    el.bf[0] = addsub_bit(el.bf[0], li.ind, 1);
+                }
+                if li.cref == -2 {
+                    el.bf[1] = addsub_bit(el.bf[1], li.ind, 1);
+                }
+                if (li.cref > -1) && (li.add_const == 0) {
+                    el.bf[2] = addsub_bit(el.bf[2], li.crind, 1)
+                }
+                if (li.cref > -1) && (li.add_const != 0) {
+                    el.bf[3] = addsub_bit(el.bf[3], li.crind, 1);
+                }
+            }
+            // for li in &el.list {
+            //     if li.cref == -1 {
+            //         el.bf[0] = addsub_bit(el.bf[0], li.ind, 1);
+            //     }
+            //     if li.cref == -2 {
+            //         el.bf[1] = addsub_bit(el.bf[1], li.ind, 1);
+            //     }
+            //     if (li.cref == -1) && (li.add_const == 0) {
+            //         el.bf[2] = addsub_bit(el.bf[2], li.crind, 1);
+            //     }
+            //     if (li.cref == -1) && (li.add_const != 0) {
+            //         el.bf[3] = addsub_bit(el.bf[3], li.crind, 1);
+            //     }
+            // }
+        }
+        count += 1;
+    }
+}
 
 fn build_condition_list(filename: String) -> Vec<Node> {
     let f = File::open(filename).expect("Errors reading cond file");
@@ -434,61 +454,66 @@ fn new_randM(M: &mut [u32; 32]) {
     }
 }
 
-// fn fcheck_cond(ind: i32, N: &mut Vec<Node>) -> bool {
-//     let mut x: u32 = 0;
-//     x |= (!N[RELATIVE_INDEX + ind as usize].val) & N[RELATIVE_INDEX + ind as usize].bf[0];
-//     x |= N[RELATIVE_INDEX + ind as usize].val & N[RELATIVE_INDEX + ind as usize].bf[1];
-//     println!("{}", x);
-//     x |= (N[RELATIVE_INDEX + (ind - 1) as usize].val & N[RELATIVE_INDEX + ind as usize].bf[2])
-//         ^ (N[RELATIVE_INDEX + ind as usize].val & N[RELATIVE_INDEX + ind as usize].bf[2]);
-//     println!("{}", x);
-//     if N[RELATIVE_INDEX + ind as usize].bf[3] != 0 {
-//         // for el in &N[RELATIVE_INDEX + ind as usize].list {
-//         //     println!("here {}", el.add_const);
-//         //     if el.add_const != 0 {
-//         //         x |= (!(N[el.crind as usize].val) & N[RELATIVE_INDEX + ind as usize].bf[3])
-//         //             ^ (N[RELATIVE_INDEX + ind as usize].val
-//         //                 & N[RELATIVE_INDEX + ind as usize].bf[2]);
-//         //         break;
-//         //     }
-//         // }
-//         let mut list = &N[RELATIVE_INDEX + ind as usize].list[0];
-//         for (i, el) in N[RELATIVE_INDEX + ind as usize].list.iter().enumerate() {
-//             if i != 0 && el.add_const != 0 {
-//                 break;
-//             }
-//             list = el;
-//         }
-//         x |= (!(N[list.crind as usize].val) & N[RELATIVE_INDEX + ind as usize].bf[3])
-//             ^ (N[RELATIVE_INDEX + ind as usize].val & N[RELATIVE_INDEX + ind as usize].bf[2]);
-//     }
-//     println!("{}", x);
-//     x != 0
-// }
-fn check_cond(ind: i32, N: &mut Vec<Node>) -> i32 {
-    let mut b1: u32;
-    let mut b2: u32;
-
-    for (_, list) in N[RELATIVE_INDEX + ind as usize].list.iter().enumerate() {
-        // println!("here {}", list.ind);
-        // println!("CONDITION {:?}", list);
-        // get bit value at list->ind
-        b1 = get_bit(N[RELATIVE_INDEX + ind as usize].val, list.ind);
-        // println!("b1 {}", b1);
-        if list.cref < 0 {
-            if b1 != (list.cref + 2) as u32 {
-                return 0;
+fn fcheck_cond(ind: i32, N: &mut Vec<Node>) -> u32 {
+    let mut x: u32 = 0;
+    x |= (!N[RELATIVE_INDEX + ind as usize].val) & N[RELATIVE_INDEX + ind as usize].bf[0];
+    // println!(
+    //     "{} {} {} {} {} {}",
+    //     x,
+    //     N[RELATIVE_INDEX + ind as usize].val,
+    //     N[RELATIVE_INDEX + ind as usize].bf[0],
+    //     N[RELATIVE_INDEX + ind as usize].bf[1],
+    //     N[RELATIVE_INDEX + ind as usize].bf[2],
+    //     N[RELATIVE_INDEX + ind as usize].bf[3]
+    // );
+    x |= N[RELATIVE_INDEX + ind as usize].val & N[RELATIVE_INDEX + ind as usize].bf[1];
+    // println!("{} {} ", x, N[RELATIVE_INDEX + ind as usize - 1].val);
+    x |= (N[RELATIVE_INDEX + ind as usize - 1].val & N[RELATIVE_INDEX + ind as usize].bf[2])
+        ^ (N[RELATIVE_INDEX + ind as usize].val & N[RELATIVE_INDEX + ind as usize].bf[2]);
+    // println!("{} {}", x, N[RELATIVE_INDEX + ind as usize].bf[3]);
+    if N[RELATIVE_INDEX + ind as usize].bf[3] != 0 {
+        let list_iter = N[RELATIVE_INDEX + ind as usize].list.iter();
+        let li = list_iter.last();
+        match li {
+            Some(list) => {
+                // println!("YEAH RIGHT HERE {:?}", list);
+                x |= (!(N[list.crind as usize].val) & N[RELATIVE_INDEX + ind as usize].bf[3])
+                ^ (N[RELATIVE_INDEX + ind as usize].val & N[RELATIVE_INDEX + ind as usize].bf[2]);
             }
-        } else {
-            b2 = get_bit(N[RELATIVE_INDEX + list.cref as usize].val, list.crind);
-            if b1 != (b2 ^ list.add_const as u32) {
-                return 0;
+            _ => {
+                panic!("BRUV LI MUST BE SOME");
             }
         }
+       
     }
-
-    1
+    // println!("\tMOTHERFUCKING FCHECK --> {}", x);
+    x
 }
+
+// fn check_cond(ind: i32, N: &mut Vec<Node>) -> i32 {
+//     let mut b1: u32;
+//     let mut b2: u32;
+
+//     for (_, list) in N[RELATIVE_INDEX + ind as usize].list.iter().enumerate() {
+//         // println!("here {}", list.ind);
+//         // println!("CONDITION {:?}", list);
+//         // get bit value at list->ind
+//         b1 = get_bit(N[RELATIVE_INDEX + ind as usize].val, list.ind);
+//         // println!("b1 {}", b1);
+//         if list.cref < 0 {
+//             if b1 != (list.cref + 2) as u32 {
+//                 return 0;
+//             }
+//         } else {
+//             b2 = get_bit(N[RELATIVE_INDEX + list.cref as usize].val, list.crind);
+//             if b1 != (b2 ^ list.add_const as u32) {
+//                 return 0;
+//             }
+//         }
+//     }
+
+//     1
+// }
 
 fn klima1_3(M: &mut [u32; 32], N: &mut Vec<Node>) -> bool {
     let mut rng = rand::thread_rng();
@@ -499,7 +524,7 @@ fn klima1_3(M: &mut [u32; 32], N: &mut Vec<Node>) -> bool {
     N[RELATIVE_INDEX + 17].val = 0;
     let mut count = 0;
     // println!("Check cond {} {}",  check_cond(18, N), check_cond(18, N) != 0); //, fcheck_cond(18, N));
-    while (check_cond(17, N) != 0) || (check_cond(18, N) != 0) {
+    while (fcheck_cond(17, N) != 0) || (fcheck_cond(18, N) != 0) {
         count += 1;
         if count > 4096 {
             return true;
@@ -723,11 +748,21 @@ fn klima4_9(M: &mut [u32; 32], N: &mut Vec<Node>, G_N19: &mut u32) {
             5,
         ))
         .0;
-    if check_cond(20, N) != 0 {
+    // println!(
+    //     "{} {} {} {} {}",
+    //     M[3],
+    //     N[RELATIVE_INDEX + 1].val,
+    //     M[4],
+    //     N[RELATIVE_INDEX + 20].val,
+    //     M[5]
+    // );
+    if fcheck_cond(20, N) != 0 {
         *G_N19 += 0x7f;
         fix_n19(G_N19);
         N[RELATIVE_INDEX + 19].val = *G_N19;
+        // println!("{} {}", N[RELATIVE_INDEX + 19].val, *G_N19);
     }
+    // println!(" ========= end klima 4_9 ========= ");
 }
 
 fn first_block(M: &mut [u32; 32], N: &mut Vec<Node>, dt: [u32; 68], G_N19: &mut u32) {
@@ -748,9 +783,6 @@ fn first_block(M: &mut [u32; 32], N: &mut Vec<Node>, dt: [u32; 68], G_N19: &mut 
     N[RELATIVE_INDEX - 1].val = IV[1];
     N[RELATIVE_INDEX - 1].Tval = IV[1];
 
-    // println!("{}", check_diffs(M, N, 0, dt));
-    // panic!();
-
     // find message such that all first round conditions and differentials
     // are satisfied - this should be fast
     first_round(M, N, dt);
@@ -764,11 +796,12 @@ fn first_block(M: &mut [u32; 32], N: &mut Vec<Node>, dt: [u32; 68], G_N19: &mut 
         first_round(M, N, dt);
     }
 
-    // iterating over possible values for N[19], check to see if all
-    // other differentials/conditions hold
+    // // iterating over possible values for N[19], check to see if all
+    // // other differentials/conditions hold
     klima4_9(M, N, G_N19);
-    let mut stepno = check_diffs(M, N, 0, dt);
+    let mut stepno = check_diffs(M, N, 20, dt);
     println!("Stepno {}", stepno);
+    // panic!();
 
     while stepno >= 0 {
         if *G_N19 >= 0x80000000 {
@@ -784,20 +817,34 @@ fn first_block(M: &mut [u32; 32], N: &mut Vec<Node>, dt: [u32; 68], G_N19: &mut 
         stepno = check_diffs(M, N, 20, dt);
         // println!("Stepno {} - G_N19 {}", stepno, G_N19);
     }
+    println!("BRUV SUCC - stepno {}", stepno);
 }
 
 fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) -> i32 {
     let mut Mprime: [u32; 16] = [0; 16];
     Mprime.copy_from_slice(&M[..16]);
 
+    for i in 0..16 {
+        assert_eq!(M[i], Mprime[i]);
+    }
+
     Mprime[4] = addsub_bit(Mprime[4], 31, 1);
     Mprime[11] = addsub_bit(Mprime[11], 15, 1);
     Mprime[14] = addsub_bit(Mprime[14], 31, 1);
     let mut local_index: usize = index as usize;
+    // println!("Local Index: {}", local_index);
+    // for i in 0..16 {
+    //     println!("Mprime {}", Mprime[i]);
+    // }
 
     if local_index == 20 {
         for i in 15..20 {
             N[RELATIVE_INDEX + i].Tval = N[RELATIVE_INDEX + i].val.overflowing_add(dt[i]).0;
+            // println!(
+            //     "{} {}",
+            //     N[RELATIVE_INDEX + i].Tval,
+            //     N[RELATIVE_INDEX + i].val
+            // );
         }
     }
 
@@ -834,7 +881,25 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
             //     dt[i]
             // );
 
-            N[RELATIVE_INDEX + i].Tval = N[RELATIVE_INDEX + i]
+            // println!(
+            //     "\tCLS: {}",
+            //     cls(
+            //         F(
+            //             N[RELATIVE_INDEX + i - 1].Tval,
+            //             N[RELATIVE_INDEX + i - 2].Tval,
+            //             N[RELATIVE_INDEX + i - 3].Tval,
+            //         )
+            //         .overflowing_add(N[RELATIVE_INDEX + i - 4].Tval)
+            //         .0
+            //         .overflowing_add(Mprime[Mmap[i] as usize])
+            //         .0
+            //         .overflowing_add(Tmap[i])
+            //         .0,
+            //         Smap[i],
+            //     )
+            // );
+
+            N[RELATIVE_INDEX + i].Tval = N[RELATIVE_INDEX + i - 1]
                 .Tval
                 .overflowing_add(cls(
                     F(
@@ -889,7 +954,7 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
             ))
             .0;
 
-        N[RELATIVE_INDEX + i].Tval = N[RELATIVE_INDEX + i]
+        N[RELATIVE_INDEX + i].Tval = N[RELATIVE_INDEX + i - 1]
             .Tval
             .overflowing_add(cls(
                 G(
@@ -935,7 +1000,7 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
             ))
             .0;
 
-        N[RELATIVE_INDEX + i].Tval = N[RELATIVE_INDEX + i]
+        N[RELATIVE_INDEX + i].Tval = N[RELATIVE_INDEX + i - 1]
             .Tval
             .overflowing_add(cls(
                 H(
@@ -977,7 +1042,7 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
             ))
             .0;
 
-        N[RELATIVE_INDEX + i].Tval = N[RELATIVE_INDEX + i]
+        N[RELATIVE_INDEX + i].Tval = N[RELATIVE_INDEX + i - 1]
             .Tval
             .overflowing_add(cls(
                 I(
@@ -1024,7 +1089,7 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
             ))
             .0;
 
-        N[RELATIVE_INDEX + i].Tval = N[RELATIVE_INDEX + i]
+        N[RELATIVE_INDEX + i].Tval = N[RELATIVE_INDEX + i - 1]
             .Tval
             .overflowing_add(cls(
                 I(
@@ -1044,17 +1109,17 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
     }
 
     // Calculate new chaining variables
-    N[RELATIVE_INDEX + 68].val = N[RELATIVE_INDEX + 60].val + N[RELATIVE_INDEX - 4].val;
-    N[RELATIVE_INDEX + 69].val = N[RELATIVE_INDEX + 61].val + N[RELATIVE_INDEX - 3].val;
-    N[RELATIVE_INDEX + 70].val = N[RELATIVE_INDEX + 62].val + N[RELATIVE_INDEX - 2].val;
-    N[RELATIVE_INDEX + 71].val = N[RELATIVE_INDEX + 63].val + N[RELATIVE_INDEX - 1].val;
-    N[RELATIVE_INDEX + 68].Tval = N[RELATIVE_INDEX + 60].Tval + N[RELATIVE_INDEX - 4].val;
-    N[RELATIVE_INDEX + 69].Tval = N[RELATIVE_INDEX + 61].Tval + N[RELATIVE_INDEX - 3].val;
-    N[RELATIVE_INDEX + 70].Tval = N[RELATIVE_INDEX + 62].Tval + N[RELATIVE_INDEX - 2].val;
-    N[RELATIVE_INDEX + 71].Tval = N[RELATIVE_INDEX + 63].Tval + N[RELATIVE_INDEX - 1].val;
+    N[RELATIVE_INDEX + 68].val = N[RELATIVE_INDEX + 60].val.overflowing_add(N[RELATIVE_INDEX - 4].val).0;
+    N[RELATIVE_INDEX + 69].val = N[RELATIVE_INDEX + 61].val.overflowing_add(N[RELATIVE_INDEX - 3].val).0;
+    N[RELATIVE_INDEX + 70].val = N[RELATIVE_INDEX + 62].val.overflowing_add(N[RELATIVE_INDEX - 2].val).0;
+    N[RELATIVE_INDEX + 71].val = N[RELATIVE_INDEX + 63].val.overflowing_add(N[RELATIVE_INDEX - 1].val).0;
+    N[RELATIVE_INDEX + 68].Tval = N[RELATIVE_INDEX + 60].Tval.overflowing_add(N[RELATIVE_INDEX - 4].val).0;
+    N[RELATIVE_INDEX + 69].Tval = N[RELATIVE_INDEX + 61].Tval.overflowing_add(N[RELATIVE_INDEX - 3].val).0;
+    N[RELATIVE_INDEX + 70].Tval = N[RELATIVE_INDEX + 62].Tval.overflowing_add(N[RELATIVE_INDEX - 2].val).0;
+    N[RELATIVE_INDEX + 71].Tval = N[RELATIVE_INDEX + 63].Tval.overflowing_add(N[RELATIVE_INDEX - 1].val).0;
 
     for i in 69..72 {
-        if check_cond(i, N) != 0 {
+        if fcheck_cond(i, N) != 0 {
             return i;
         }
         if N[RELATIVE_INDEX + i as usize]
@@ -1077,13 +1142,39 @@ fn block1() {
 
     // Building condition list and bitfield
     let mut re = build_condition_list("./data/md5cond_1.txt".to_string());
-    // build_bitfield(&mut re);
+    build_bitfield(&mut re);
     let dt = construct_diff_table();
     let mut M: [u32; 32] = [0; 32];
     for i in 0..16 {
         M[i] = rng.gen();
     }
+    println!("\n\tBefore CV: {:x}{:x}{:x}{:x}", re[68].val, re[71].val, re[70].val, re[69].val);
     first_block(&mut M, &mut re, dt, &mut G_N19);
+    while check_diffs(&mut M, &mut re, 0, dt) > -1 {
+        first_block(&mut M, &mut re, dt, &mut G_N19);
+    }
+    println!("\n\tChaining value: {:x}{:x}{:x}{:x}", re[68].val, re[71].val, re[70].val, re[69].val);
+
+    // Printing out message
+    print!("M\t");
+    for i in 0..15 {
+        if i % 4 == 0 && i != 0 {
+            print!("\n\t");
+        }
+        print!("{:x}, ", M[i]);
+    }
+    print!("{:x}\n\n", M[15]);
+    M[ 4] = addsub_bit(M[ 4], 31, 1);
+    M[11] = addsub_bit(M[11], 15, 1);
+    M[14] = addsub_bit(M[14], 31, 1);
+    print!("M'\t");
+    for i in 0..15 {
+        if i % 4 == 0 && i != 0 {
+            print!("\n\t");
+        }
+        print!("{:x}, ", M[i]);
+    }
+    print!("{:x}\n\n", M[15]);
 }
 
 fn main() {
