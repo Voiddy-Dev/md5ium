@@ -114,6 +114,7 @@ struct Condition {
     add_const: i32,
 }
 
+#[derive(Debug)]
 struct Node {
     val: u32,
     Tval: u32,
@@ -201,7 +202,7 @@ fn build_bitfield(N: &mut Vec<Node>) {
             let mut list_iter = el.list.iter();
             while let Some(li) = list_iter.next() {
                 // if count == 20 {
-                //     println!("{:?}", li);
+                // println!("{} {} {} {}", li.ind, li.cref, li.crind, li.add_const);
                 // }
                 if li.cref == -1 {
                     el.bf[0] = addsub_bit(el.bf[0], li.ind, 1);
@@ -215,21 +216,8 @@ fn build_bitfield(N: &mut Vec<Node>) {
                 if (li.cref > -1) && (li.add_const != 0) {
                     el.bf[3] = addsub_bit(el.bf[3], li.crind, 1);
                 }
+                // println!("{} {} {} {}", el.bf[0], el.bf[1], el.bf[2], el.bf[3]);
             }
-            // for li in &el.list {
-            //     if li.cref == -1 {
-            //         el.bf[0] = addsub_bit(el.bf[0], li.ind, 1);
-            //     }
-            //     if li.cref == -2 {
-            //         el.bf[1] = addsub_bit(el.bf[1], li.ind, 1);
-            //     }
-            //     if (li.cref == -1) && (li.add_const == 0) {
-            //         el.bf[2] = addsub_bit(el.bf[2], li.crind, 1);
-            //     }
-            //     if (li.cref == -1) && (li.add_const != 0) {
-            //         el.bf[3] = addsub_bit(el.bf[3], li.crind, 1);
-            //     }
-            // }
         }
         count += 1;
     }
@@ -436,6 +424,7 @@ fn first_round(M: &mut [u32; 32], N: &mut Vec<Node>, diff_table: [u32; 68]) {
             {
                 flag = 0;
                 new_randM(M);
+                // panic!("BITCH IT RANDOMIZED");
             }
         }
         M[4] = addsub_bit(M[4], 31, -1);
@@ -448,10 +437,13 @@ fn first_round(M: &mut [u32; 32], N: &mut Vec<Node>, diff_table: [u32; 68]) {
 }
 
 fn new_randM(M: &mut [u32; 32]) {
+    let mut temp: [u32; 32] = [0; 32];
+    temp.copy_from_slice(M);
     let mut rng = rand::thread_rng();
     for i in 0..16 {
         M[i] = rng.gen();
     }
+    assert_ne!(&mut temp, M);
 }
 
 fn fcheck_cond(ind: i32, N: &mut Vec<Node>) -> u32 {
@@ -478,13 +470,13 @@ fn fcheck_cond(ind: i32, N: &mut Vec<Node>) -> u32 {
             Some(list) => {
                 // println!("YEAH RIGHT HERE {:?}", list);
                 x |= (!(N[list.crind as usize].val) & N[RELATIVE_INDEX + ind as usize].bf[3])
-                ^ (N[RELATIVE_INDEX + ind as usize].val & N[RELATIVE_INDEX + ind as usize].bf[2]);
+                    ^ (N[RELATIVE_INDEX + ind as usize].val
+                        & N[RELATIVE_INDEX + ind as usize].bf[2]);
             }
             _ => {
                 panic!("BRUV LI MUST BE SOME");
             }
         }
-       
     }
     // println!("\tMOTHERFUCKING FCHECK --> {}", x);
     x
@@ -579,6 +571,7 @@ fn klima1_3(M: &mut [u32; 32], N: &mut Vec<Node>) -> bool {
                 Smap[18],
             ))
             .0;
+        // println!("Count {}", count);
     }
     false
 }
@@ -785,8 +778,35 @@ fn first_block(M: &mut [u32; 32], N: &mut Vec<Node>, dt: [u32; 68], G_N19: &mut 
 
     // find message such that all first round conditions and differentials
     // are satisfied - this should be fast
+    // for i in 0..72 {
+    //     println!("{} {}", N[RELATIVE_INDEX + i].val, N[RELATIVE_INDEX + i].Tval);
+    // }
+    // for i in 0..32{
+    //     println!("i M {}", M[i]);
+    // }
+    // println!("FIRST ROUND");
     first_round(M, N, dt);
-
+    // for i in 0..72 {
+    //     println!("{} {}", N[RELATIVE_INDEX + i].val, N[RELATIVE_INDEX + i].Tval);
+    // }
+    // for i in 0..32{
+    //     println!("i M {}", M[i]);
+    // }
+    // klima1_3(M, N);
+    // klima4_9(M, N, G_N19);
+    // println!("DONE WITH KLIMA 4_9");
+    // for i in 0..72 {
+    //     println!(
+    //         "N[{}]: {} {}",
+    //         i,
+    //         N[RELATIVE_INDEX + i].val,
+    //         N[RELATIVE_INDEX + i].Tval
+    //     );
+    // }
+    // for i in 0..32 {
+    //     println!("i M {}", M[i]);
+    // }
+    // panic!();
     // do the first setup steps from Klima's code (steps 1-3)
     while klima1_3(M, N)
     // sometimes klima1_3 cannot be completed for
@@ -817,7 +837,7 @@ fn first_block(M: &mut [u32; 32], N: &mut Vec<Node>, dt: [u32; 68], G_N19: &mut 
         stepno = check_diffs(M, N, 20, dt);
         // println!("Stepno {} - G_N19 {}", stepno, G_N19);
     }
-    println!("BRUV SUCC - stepno {}", stepno);
+    println!("BRUV SUCCESS - stepno {}", stepno);
 }
 
 fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) -> i32 {
@@ -1109,14 +1129,38 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
     }
 
     // Calculate new chaining variables
-    N[RELATIVE_INDEX + 68].val = N[RELATIVE_INDEX + 60].val.overflowing_add(N[RELATIVE_INDEX - 4].val).0;
-    N[RELATIVE_INDEX + 69].val = N[RELATIVE_INDEX + 61].val.overflowing_add(N[RELATIVE_INDEX - 3].val).0;
-    N[RELATIVE_INDEX + 70].val = N[RELATIVE_INDEX + 62].val.overflowing_add(N[RELATIVE_INDEX - 2].val).0;
-    N[RELATIVE_INDEX + 71].val = N[RELATIVE_INDEX + 63].val.overflowing_add(N[RELATIVE_INDEX - 1].val).0;
-    N[RELATIVE_INDEX + 68].Tval = N[RELATIVE_INDEX + 60].Tval.overflowing_add(N[RELATIVE_INDEX - 4].val).0;
-    N[RELATIVE_INDEX + 69].Tval = N[RELATIVE_INDEX + 61].Tval.overflowing_add(N[RELATIVE_INDEX - 3].val).0;
-    N[RELATIVE_INDEX + 70].Tval = N[RELATIVE_INDEX + 62].Tval.overflowing_add(N[RELATIVE_INDEX - 2].val).0;
-    N[RELATIVE_INDEX + 71].Tval = N[RELATIVE_INDEX + 63].Tval.overflowing_add(N[RELATIVE_INDEX - 1].val).0;
+    N[RELATIVE_INDEX + 68].val = N[RELATIVE_INDEX + 60]
+        .val
+        .overflowing_add(N[RELATIVE_INDEX - 4].val)
+        .0;
+    N[RELATIVE_INDEX + 69].val = N[RELATIVE_INDEX + 61]
+        .val
+        .overflowing_add(N[RELATIVE_INDEX - 3].val)
+        .0;
+    N[RELATIVE_INDEX + 70].val = N[RELATIVE_INDEX + 62]
+        .val
+        .overflowing_add(N[RELATIVE_INDEX - 2].val)
+        .0;
+    N[RELATIVE_INDEX + 71].val = N[RELATIVE_INDEX + 63]
+        .val
+        .overflowing_add(N[RELATIVE_INDEX - 1].val)
+        .0;
+    N[RELATIVE_INDEX + 68].Tval = N[RELATIVE_INDEX + 60]
+        .Tval
+        .overflowing_add(N[RELATIVE_INDEX - 4].val)
+        .0;
+    N[RELATIVE_INDEX + 69].Tval = N[RELATIVE_INDEX + 61]
+        .Tval
+        .overflowing_add(N[RELATIVE_INDEX - 3].val)
+        .0;
+    N[RELATIVE_INDEX + 70].Tval = N[RELATIVE_INDEX + 62]
+        .Tval
+        .overflowing_add(N[RELATIVE_INDEX - 2].val)
+        .0;
+    N[RELATIVE_INDEX + 71].Tval = N[RELATIVE_INDEX + 63]
+        .Tval
+        .overflowing_add(N[RELATIVE_INDEX - 1].val)
+        .0;
 
     for i in 69..72 {
         if fcheck_cond(i, N) != 0 {
@@ -1144,16 +1188,22 @@ fn block1() {
     let mut re = build_condition_list("./data/md5cond_1.txt".to_string());
     build_bitfield(&mut re);
     let dt = construct_diff_table();
+    // Initial random message
     let mut M: [u32; 32] = [0; 32];
     for i in 0..16 {
         M[i] = rng.gen();
     }
-    println!("\n\tBefore CV: {:x}{:x}{:x}{:x}", re[68].val, re[71].val, re[70].val, re[69].val);
     first_block(&mut M, &mut re, dt, &mut G_N19);
     while check_diffs(&mut M, &mut re, 0, dt) > -1 {
         first_block(&mut M, &mut re, dt, &mut G_N19);
     }
-    println!("\n\tChaining value: {:x}{:x}{:x}{:x}", re[68].val, re[71].val, re[70].val, re[69].val);
+    println!(
+        "\n\tChaining value: {:x}{:x}{:x}{:x}",
+        re[RELATIVE_INDEX + 68].val,
+        re[RELATIVE_INDEX + 71].val,
+        re[RELATIVE_INDEX + 70].val,
+        re[RELATIVE_INDEX + 69].val
+    );
 
     // Printing out message
     print!("M\t");
@@ -1164,7 +1214,7 @@ fn block1() {
         print!("{:x}, ", M[i]);
     }
     print!("{:x}\n\n", M[15]);
-    M[ 4] = addsub_bit(M[ 4], 31, 1);
+    M[4] = addsub_bit(M[4], 31, 1);
     M[11] = addsub_bit(M[11], 15, 1);
     M[14] = addsub_bit(M[14], 31, 1);
     print!("M'\t");
@@ -1178,6 +1228,6 @@ fn block1() {
 }
 
 fn main() {
-    println!("---==[md5ium]==---");
+    // println!("---==[md5ium]==---");
     block1();
 }
