@@ -31,6 +31,25 @@ const Tmap: [u32; 64] = [
     0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1, 0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391,
 ];
 
+const differences: [u32; 64] = [
+	0x82000000,0x82000020,0xfe3f18e0,0x8600003e,
+	0x80001fc1,0x80330000,0x980003c0,0x87838000,
+	0x800003c3,0x80001000,0x80000000,0x800fe080,
+	0xff000000,0x80000000,0x80008008,0xa0000000,
+	0x80000000, 0x80000000, 0x80020000, 0x80000000,
+	0x80000000, 0x80000000, 0, 0,
+	0,0,0,0,
+	0,0,0,0,
+	0,0,0x80000000, 0x80000000,
+	0x80000000, 0x80000000, 0x80000000, 0x80000000,
+	0x80000000, 0x80000000, 0x80000000, 0x80000000,
+	0x80000000, 0x80000000, 0x80000000, 0x80000000,
+	0x80000000, 0x80000000, 0x80000000, 0x80000000,
+	0x80000000, 0x80000000, 0x80000000, 0x80000000,
+	0x80000000, 0x80000000, 0x80000000, 0x80000000,
+	0x80000000, 0x82000000, 0x82000000, 0x86000000
+];
+
 #[inline]
 fn addsub_bit(x: u32, i: i32, b: i32) -> u32 {
     if b != 1 && b != -1 {
@@ -104,6 +123,25 @@ fn H(x: u32, y: u32, z: u32) -> u32 {
 #[inline]
 fn I(x: u32, y: u32, z: u32) -> u32 {
     return y ^ (x | (!z));
+}
+
+#[inline]
+fn cover_func(b: u32, c: u32, d: u32, i: usize) -> u32 {
+    if i < 16 {
+        return F(b, c, d);
+    }
+    if i < 32 {
+        return G(b, c, d);
+    }
+    if i < 48 {
+        return H(b, c, d);
+    }
+    return I(b, c, d);
+}
+
+#[inline]
+fn phi(Q: &mut [u32; 68], i: usize) -> u32 {
+    return cover_func(Q[i - 1], Q[i - 2], Q[i - 3], i - 4);
 }
 
 #[derive(Debug)]
@@ -221,6 +259,26 @@ fn build_bitfield(N: &mut Vec<Node>) {
         }
         count += 1;
     }
+}
+
+fn build_condition_list_block_2(filename: String) -> [[u32; 3]; 309] {
+    let f = File::open(filename).expect("Errors reading cond file");
+    let reader = BufReader::new(f);
+
+    let mut res: [[u32; 3]; 309] = [[0; 3]; 309];
+
+    for (i, line) in reader.lines().enumerate() {
+        match line {
+            Ok(l) => {
+                let mut split = l.split(" ");
+                res[i][0] = split.next().unwrap().parse::<u32>().unwrap();
+                res[i][1] = split.next().unwrap().parse::<u32>().unwrap();
+                res[i][2] = split.next().unwrap().parse::<u32>().unwrap();
+            }
+            _ => print!("Error in line."),
+        }
+    }
+    res
 }
 
 fn build_condition_list(filename: String) -> Vec<Node> {
@@ -1179,7 +1237,7 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
     return -1;
 }
 
-fn block1() {
+fn block1() -> [u32; 4] {
     let mut G_N19: u32 = 0;
 
     let mut rng = rand::thread_rng();
@@ -1225,9 +1283,512 @@ fn block1() {
         print!("{:x}, ", M[i]);
     }
     print!("{:x}\n\n", M[15]);
+
+    return [
+        re[RELATIVE_INDEX + 68].val,
+        re[RELATIVE_INDEX + 71].val,
+        re[RELATIVE_INDEX + 70].val,
+        re[RELATIVE_INDEX + 69].val,
+    ];
+}
+
+fn satisfy_stationary(Q: &mut [u32; 68], type1: i32, cond: [[u32; 3]; 309]) {
+    let mut bit;
+    let mut type_2;
+    let mut j = 0;
+    let mut k;
+    let mut m;
+
+    //satisfy Q[7-10] for multimessage
+    if (type1 == 0) {
+        m = 145;
+        k = 211;
+    }
+    //satisfy Q[0,1]
+    else if (type1 == 2) {
+        m = 0;
+        k = 52;
+    }
+    //satisfy Q[0-15]
+    else {
+        m = 0;
+        k = 274;
+    }
+    //reads through conditions modifying Q[0-15] to satisfy their conditions
+    for mut i in m..k {
+        j = cond[i][0] + 4;
+        let mut zeroBit: u32 = 0xffffffff;
+        let mut oneBit: u32 = 0;
+        while (cond[i][0] == j - 4) {
+            bit = cond[i][1];
+            type_2 = cond[i][2];
+            //designated bit should be set to zero
+            if (type_2 == 0) {
+                zeroBit = zeroBit & !(1 << (bit - 1));
+            }
+            //designated bit should be set to one
+            else if (type_2 == 1) {
+                oneBit = oneBit | (1 << (bit - 1));
+            }
+            /*designated bit should be set eQual to the
+            same bit of the previous chaining value*/
+            else if (type_2 == 2) {
+                if ((Q[j as usize - 1] & (1 << (bit - 1))) != 0) {
+                    oneBit = oneBit | (1 << (bit - 1));
+                } else {
+                    zeroBit = zeroBit & !(1 << (bit - 1));
+                }
+            }
+            /*designated bit in chaining value x should
+            be set eQual to the same bit of chaining value x-2*/
+            else if (type_2 == 3) {
+                if ((Q[j as usize - 2] & (1 << (bit - 1))) != 0) {
+                    oneBit = oneBit | (1 << (bit - 1));
+                } else {
+                    zeroBit = zeroBit & !(1 << (bit - 1));
+                }
+            }
+            /*designated bit should be set to the negation
+            of the same bit of the previous chaining value*/
+            else if (type_2 == 4) {
+                //printf("here");
+                if ((Q[j as usize - 1] & (1 << (bit - 1))) == 0) {
+                    oneBit = oneBit | (1 << (bit - 1));
+                } else {
+                    zeroBit = zeroBit & !(1 << (bit - 1));
+                }
+            }
+            i += 1;
+        }
+        i -= 1;
+        //modify Q[j] to satisfy conditions
+        Q[j as usize] = Q[j as usize] | oneBit;
+        Q[j as usize] = Q[j as usize] & zeroBit;
+    }
+}
+
+#[inline]
+fn RR(var: u32, num: i32) -> u32 {
+    let temp: u32 = var >> num;
+    return (var << (32 - num)) | temp;
+}
+#[inline]
+fn RL(var: u32, num: i32) -> u32 {
+    let temp: u32 = var << num;
+    return (var >> (32 - num)) | temp;
+}
+
+fn findx(Q: &mut [u32; 68], M: &mut [u32; 16], Mprime: &mut [u32; 16]) {
+    for i in 4..20 {
+        M[i - 4] = RR((Q[i] - Q[i - 1]), Smap[i - 4]) - Tmap[i - 4] - Q[i - 4] - phi(Q, i);
+        Mprime[i - 4] = M[i - 4];
+    }
+    Mprime[4] = Mprime[4] - 0x80000000;
+    Mprime[11] = Mprime[11] - 0x8000;
+    Mprime[14] = Mprime[14] - 0x80000000;
+}
+
+fn md5step20(
+    M: &mut [u32; 16],
+    vals: &mut [u32; 68],
+    Mprime: &mut [u32; 16],
+    vals1: &mut [u32; 68],
+) {
+    let mut a = vals[0];
+    let mut b = vals[3];
+    let mut c = vals[2];
+    let mut d = vals[1];
+    let mut t;
+    let mut t1;
+    for j in 0..16 {
+        t = a + ((b & c) | ((!b) & d)) + M[Mmap[j] as usize] + Tmap[j];
+        let mut temp = d;
+        d = c;
+        c = b;
+        a = temp;
+        t1 = t >> (32 - Smap[j]);
+        b = b + ((t << Smap[j]) + t1);
+        vals[j + 4] = b;
+    }
+    for j in 16..21 {
+        t = a + ((b & d) | (c & !d)) + M[Mmap[j] as usize] + Tmap[j];
+        let mut temp = d;
+        d = c;
+        c = b;
+        a = temp;
+        t1 = t >> (32 - Smap[j]);
+        b = b + ((t << Smap[j]) + t1);
+        vals[j + 4] = b;
+    }
+    a = vals1[0];
+    b = vals1[3];
+    c = vals1[2];
+    d = vals1[1];
+    // t;
+    // t1;
+    for j in 0..16 {
+        t = a + ((b & c) | ((!b) & d)) + Mprime[Mmap[j] as usize] + Tmap[j];
+        let mut temp = d;
+        d = c;
+        c = b;
+        a = temp;
+        t1 = t >> (32 - Smap[j]);
+        b = b + ((t << Smap[j]) + t1);
+        vals1[j + 4] = b;
+    }
+    for j in 16..21 {
+        t = a + ((b & d) | (c & !d)) + Mprime[Mmap[j] as usize] + Tmap[j];
+        let mut temp = d;
+        d = c;
+        c = b;
+        a = temp;
+        t1 = t >> (32 - Smap[j]);
+        b = b + ((t << Smap[j]) + t1);
+        vals1[j + 4] = b;
+    }
+}
+
+fn check_stationary(Q: [u32; 68], m: i32, k: i32, cond: [[u32; 3]; 309]) -> bool {
+    let mut bit;
+    let mut type_2;
+    let mut j: u32 = 0;
+    for mut i in m..k {
+        j = cond[i as usize][0] + 4;
+        let mut zeroBit: u32 = 0xffffffff;
+        let mut oneBit: u32 = 0;
+        while (cond[i as usize][0] == j - 4) {
+            bit = cond[i as usize][1];
+            type_2 = cond[i as usize][2];
+            if (type_2 == 0) {
+                zeroBit = zeroBit & !(1 << (bit - 1));
+            } else if (type_2 == 1) {
+                oneBit = oneBit | (1 << (bit - 1));
+            } else if (type_2 == 2) {
+                if ((Q[j as usize - 1] & (1 << (bit - 1))) != 0) {
+                    oneBit = oneBit | (1 << (bit - 1));
+                } else {
+                    zeroBit = zeroBit & !(1 << (bit - 1));
+                }
+            } else if (type_2 == 3) {
+                if ((Q[j as usize - 2] & (1 << (bit - 1))) != 0) {
+                    oneBit = oneBit | (1 << (bit - 1));
+                } else {
+                    zeroBit = zeroBit & !(1 << (bit - 1));
+                }
+            } else if (type_2 == 4) {
+                if ((Q[j as usize - 1] & (1 << (bit - 1))) == 0) {
+                    oneBit = oneBit | (1 << (bit - 1));
+                } else {
+                    zeroBit = zeroBit & !(1 << (bit - 1));
+                }
+            }
+            i += 1;
+        }
+        i -= 1;
+        if (Q[j as usize] != (Q[j as usize] | oneBit)) {
+            //printf("%d %x 1\n", j, Q[j]);
+            return false;
+        }
+        if (Q[j as usize] != (Q[j as usize] & zeroBit)) {
+            //printf("%d %x 2\n", j, Q[j]);
+            return false;
+        }
+    }
+    return true;
+}
+
+fn block2(CV: [u32; 4]) {
+    let mut rng = rand::thread_rng();
+
+    println!(
+        "ChainingValue: {:x}{:x}{:x}{:x}",
+        CV[0], CV[1], CV[2], CV[3]
+    );
+
+    let mut Q: [u32; 68] = [0; 68];
+    let mut Qprime: [u32; 68] = [0; 68];
+
+    Q[0] = CV[0];
+    Q[1] = CV[1];
+    Q[2] = CV[2];
+    Q[3] = CV[3];
+
+    Qprime[0] = Q[0] ^ (0x80000000);
+    Qprime[1] = Q[1] ^ (0x82000000);
+    Qprime[2] = Q[2] ^ (0x86000000);
+    Qprime[3] = Q[3] ^ (0x82000000);
+
+    let cond: [[u32; 3]; 309] = build_condition_list_block_2("./data/md5cond_2.txt".to_string());
+    let mut messageFound = false;
+    while !messageFound {
+        let mut b = true;
+        let mut c = true;
+
+        let mut M: [u32; 16] = [0; 16];
+        let mut Mprime: [u32; 16] = [0; 16];
+        while c {
+            b = true;
+            while b {
+                for i in 4..20 {
+                    Q[i] = rng.gen();
+                }
+                satisfy_stationary(&mut Q, 1, cond);
+                findx(&mut Q, &mut M, &mut Mprime);
+                if ((M[4] | M[14]) & 0x80000000) != 0 && (M[11] & 0x8000) != 0 {
+                    md5step20(&mut M, &mut Q, &mut Mprime, &mut Qprime);
+                    if (Q[19] ^ Qprime[19]) == 0xa0000000 {
+                        if check_stationary(Q, 0, 274, cond) {
+                            b = false;
+                        }
+                    }
+                }
+            }
+
+            b = true;
+            let mut number: i32 = 0;
+            while b {
+                number += 1;
+
+                Q[5] = rng.gen();
+                Q[4] = rng.gen();
+                satisfy_stationary(&mut Q, 2, cond);
+                findx(&mut Q, &mut M, &mut Mprime);
+                md5step20(&mut M, &mut Q, &mut Mprime, &mut Qprime);
+                if number == 0x10000 {
+                    b = false;
+                }
+
+                if ((Q[19] ^ Qprime[19]) == 0xa0000000)
+                    && ((Q[24] ^ Qprime[24]) == 0x80000000)
+                    && check_stationary(Q, 0, 286, cond)
+                {
+                    c = false;
+                    b = false;
+                }
+            }
+        }
+
+        messageFound = multiMessage2(&mut M, &mut Mprime, &mut Q, &mut Qprime);
+        if messageFound {
+            println!("BRUV SUCC");
+        }
+    }
+}
+
+fn multiMessage2(
+    M: &mut [u32; 16],
+    Mprime: &mut [u32; 16],
+    Q: &mut [u32; 68],
+    Qprime: &mut [u32; 68],
+) -> bool {
+    let mut rng = rand::thread_rng();
+    for i in 1..0x1000 {
+        Qprime[19] = 0;
+        while ((Q[24] ^ Qprime[24]) != 0x80000000) || ((Q[19] ^ Qprime[19]) != 0xa0000000) {
+            //randomly select Q[7-10] and satisfy conditons
+            Q[11] = ((rng.gen::<u32>()) & 0xe47efffe) | 0x843283c0;
+            //sets Q[7]_2 = Q[6]_2
+            if ((Q[10] & 0x2) == 0) {
+                Q[11] = Q[11] & 0xfffffffd;
+            } else {
+                Q[11] = Q[11] | 0x2;
+            }
+            Q[12] = ((rng.gen::<u32>()) & 0xfc7d7dfd) | 0x9c0101c1;
+            if ((Q[11] & 0x1000) == 0) {
+                Q[12] = Q[12] & 0xffffefff;
+            } else {
+                Q[12] = Q[12] | 0x1000;
+            }
+            Q[13] = ((rng.gen::<u32>()) & 0xfffbeffc) | 0x878383c0;
+            Q[14] = ((rng.gen::<u32>()) & 0xfffdefff) | 0x800583c3;
+            if ((Q[13] & 0x80000) == 0) {
+                Q[14] = Q[14] & 0xfff7ffff;
+            } else {
+                Q[14] = Q[14] | 0x80000;
+            }
+            if ((Q[13] & 0x4000) == 0) {
+                Q[14] = Q[14] & 0xffffbfff;
+            } else {
+                Q[14] = Q[14] | 0x4000;
+            }
+            if ((Q[13] & 0x2000) == 0) {
+                Q[14] = Q[14] & 0xffffdfff;
+            } else {
+                Q[14] = Q[14] | 0x2000;
+            }
+            if ((Q[10] & 0x80000000) == 0) {
+                Q[11] = Q[11] & 0x7fffffff;
+                Q[12] = Q[12] & 0x7fffffff;
+                Q[13] = Q[13] & 0x7fffffff;
+                Q[14] = Q[14] & 0x7fffffff;
+            }
+
+            //calculate Q[11]
+            Q[15] = Q[14] + RL(phi(Q, 15) + 0x895cd7be + M[11] + Q[11], 22);
+
+            if ((Q[15] & 0xfff81fff) == Q[15]
+                && (Q[15] | 0x00081080) == Q[15]
+                && ((Q[14] ^ Q[15]) & 0xff000000) == 0)
+            {
+                for i in 7..16 {
+                    M[i] = RR(Q[i + 4] - Q[i + 3], Smap[i]) - Tmap[i] - Q[i] - phi(Q, i + 4);
+                }
+                for v in 7..16 {
+                    Mprime[v] = M[v];
+                }
+                Mprime[11] = Mprime[11] - 0x8000;
+                Mprime[14] = Mprime[14] - 0x80000000;
+                md5step20(M, Q, Mprime, Qprime);
+            }
+        }
+
+        let mut truth = true;
+        let mut x11 = Q[15];
+        for mut j in 0..0x20000 {
+            truth = true;
+            //flip bits using gray code
+            if ((j & 0x1) != 0) {
+                if ((Q[14] & 0x4) == 0) {
+                    Q[13] = Q[13] ^ 0x4;
+                } else {
+                    Q[12] = Q[12] ^ 0x4;
+                }
+            } else if ((j & 0x2) != 0) {
+                if ((Q[14] & 0x8) == 0) {
+                    Q[13] = Q[13] ^ 0x8;
+                } else {
+                    Q[12] = Q[12] ^ 0x8;
+                }
+            } else if ((j & 0x4) != 0) {
+                if ((Q[14] & 0x10) == 0) {
+                    Q[13] = Q[13] ^ 0x10;
+                } else {
+                    Q[12] = Q[12] ^ 0x10;
+                }
+            } else if ((j & 0x8) != 0) {
+                if ((Q[14] & 0x20) == 0) {
+                    Q[13] = Q[13] ^ 0x20;
+                } else {
+                    Q[12] = Q[12] ^ 0x20;
+                }
+            } else if ((j & 0x10) != 0) {
+                if ((Q[14] & 0x400) == 0) {
+                    Q[13] = Q[13] ^ 0x400;
+                } else {
+                    Q[12] = Q[12] ^ 0x400;
+                }
+            } else if ((j & 0x20) != 0) {
+                if ((Q[14] & 0x800) == 0) {
+                    Q[13] = Q[13] ^ 0x800;
+                } else {
+                    Q[12] = Q[12] ^ 0x800;
+                }
+            } else if ((j & 0x40) != 0) {
+                if ((Q[14] & 0x100000) == 0) {
+                    Q[13] = Q[13] ^ 0x100000;
+                } else {
+                    Q[12] = Q[12] ^ 0x100000;
+                }
+            } else if ((j & 0x80) != 0) {
+                if ((Q[14] & 0x200000) == 0) {
+                    Q[13] = Q[13] ^ 0x200000;
+                } else {
+                    Q[12] = Q[12] ^ 0x200000;
+                }
+            } else if ((j & 0x100) != 0) {
+                if ((Q[14] & 0x400000) == 0) {
+                    Q[13] = Q[13] ^ 0x400000;
+                } else {
+                    Q[12] = Q[12] ^ 0x400000;
+                }
+            } else if ((j & 0x200) != 0) {
+                if ((Q[14] & 0x20000000) == 0) {
+                    Q[13] = Q[13] ^ 0x20000000;
+                } else {
+                    Q[12] = Q[12] ^ 0x20000000;
+                }
+            } else if ((j & 0x400) != 0) {
+                if ((Q[14] & 0x40000000) == 0) {
+                    Q[13] = Q[13] ^ 0x40000000;
+                } else {
+                    Q[12] = Q[12] ^ 0x40000000;
+                }
+            } else if ((j & 0x800) != 0) {
+                if ((Q[14] & 0x4000) == 0) {
+                    j = j + 0x7ff;
+                } else {
+                    Q[12] = Q[12] ^ 0x4000;
+                }
+            } else if ((j & 0x1000) != 0) {
+                if ((Q[14] & 0x80000) == 0) {
+                    j = j + 0xfff;
+                } else {
+                    Q[12] = Q[12] ^ 0x80000;
+                }
+            } else if ((j & 0x2000) != 0) {
+                if ((Q[14] & 0x40000) == 0) {
+                    j = j + 0x1fff;
+                } else {
+                    Q[12] = Q[12] ^ 0x40000;
+                }
+            } else if ((j & 0x4000) != 0) {
+                if ((Q[14] & 0x8000000) != 0) {
+                    j = j + 0x3fff;
+                } else {
+                    Q[13] = Q[13] ^ 0x8000000;
+                }
+            } else if ((j & 0x8000) != 0) {
+                if ((Q[14] & 0x10000000) != 0) {
+                    j = j + 0x7fff;
+                } else {
+                    Q[13] = Q[13] ^ 0x10000000;
+                }
+            } else if ((j & 0x10000) != 0) {
+                if ((Q[14] & 0x2000) == 0) {
+                    j = j + 0xffff;
+                } else {
+                    Q[12] = Q[12] ^ 0x2000;
+                }
+            }
+
+            for p in 8..14 {
+                M[p] = RR(Q[p + 4] - Q[p + 3], Smap[p]) - Tmap[p] - Q[p] - phi(Q, p + 4);
+                Mprime[p] = M[p];
+            }
+            Mprime[11] = Mprime[11] - 0x8000;
+            md5step20(M, Q, Mprime, Qprime);
+            for k in 21..64 {
+                md5step(M, Q, Mprime, Qprime, k);
+                if ((Q[k + 4] ^ Qprime[k + 4]) != differences[k]) {
+                    truth = false;
+                    break;
+                }
+            }
+            if (truth) {
+                let val64 = Q[64] + Q[0];
+                let val65 = Q[65] + Q[1];
+                let val66 = Q[66] + Q[2];
+                let val67 = Q[67] + Q[3];
+                let val164 = Qprime[64] + Qprime[0];
+                let val165 = Qprime[65] + Qprime[1];
+                let val166 = Qprime[66] + Qprime[2];
+                let val167 = Qprime[67] + Qprime[3];
+
+                if ((val64 ^ val164) == 0
+                    && (val65 ^ val165) == 0
+                    && (val66 ^ val166) == 0
+                    && (val67 ^ val167) == 0)
+                {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
 }
 
 fn main() {
-    // println!("---==[md5ium]==---");
-    block1();
+    println!("---==[md5ium]==---");
+    let CV: [u32; 4] = [0x72fedf07, 0xe8668655, 0xd260ed33, 0x9cac6ebe]; //block1();
+    block2(CV);
 }
