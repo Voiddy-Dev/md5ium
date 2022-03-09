@@ -6,17 +6,17 @@ const IV: [u32; 4] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476];
 const RELATIVE_INDEX: usize = 4;
 
 // Step-dependent constant values
-const Smap: [i32; 64] = [
+const SMAP: [i32; 64] = [
     7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9,
     14, 20, 5, 9, 14, 20, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 6, 10, 15,
     21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21,
 ];
-const Mmap: [u8; 64] = [
+const MMAP: [u8; 64] = [
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 1, 6, 11, 0, 5, 10, 15, 4, 9, 14, 3, 8,
     13, 2, 7, 12, 5, 8, 11, 14, 1, 4, 7, 10, 13, 0, 3, 6, 9, 12, 15, 2, 0, 7, 14, 5, 12, 3, 10, 1,
     8, 15, 6, 13, 4, 11, 2, 9,
 ];
-const Tmap: [u32; 64] = [
+const TMAP: [u32; 64] = [
     /* Round 1 */
     0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee, 0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501,
     0x698098d8, 0x8b44f7af, 0xffff5bb1, 0x895cd7be, 0x6b901122, 0xfd987193, 0xa679438e, 0x49b40821,
@@ -31,7 +31,7 @@ const Tmap: [u32; 64] = [
     0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1, 0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391,
 ];
 
-const differences: [u32; 64] = [
+const DIFFERENCES: [u32; 64] = [
     0x82000000, 0x82000020, 0xfe3f18e0, 0x8600003e, 0x80001fc1, 0x80330000, 0x980003c0, 0x87838000,
     0x800003c3, 0x80001000, 0x80000000, 0x800fe080, 0xff000000, 0x80000000, 0x80008008, 0xa0000000,
     0x80000000, 0x80000000, 0x80020000, 0x80000000, 0x80000000, 0x80000000, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -63,12 +63,12 @@ fn addsub_bit(x: u32, i: i32, b: i32) -> u32 {
 }
 
 #[inline]
-fn fix_n19(G_N19: &mut u32) {
-    if get_bit(*G_N19, 12) == 1 {
-        *G_N19 = addsub_bit(*G_N19, 12, 1);
+fn fix_n19(g_n19: &mut u32) {
+    if get_bit(*g_n19, 12) == 1 {
+        *g_n19 = addsub_bit(*g_n19, 12, 1);
     }
-    if get_bit(*G_N19, 26) == 1 {
-        *G_N19 = addsub_bit(*G_N19, 26, 1);
+    if get_bit(*g_n19, 26) == 1 {
+        *g_n19 = addsub_bit(*g_n19, 26, 1);
     }
 }
 
@@ -210,7 +210,7 @@ fn smm5(index: i32, N: &mut Vec<Node>) -> u32 {
     // recompute correct message value for updated value of x
     return crs(
         x.overflowing_sub(N[RELATIVE_INDEX + i1 as usize].val).0,
-        Smap[index as usize],
+        SMAP[index as usize],
     )
     .overflowing_sub(N[RELATIVE_INDEX + i4 as usize].val)
     .0
@@ -220,7 +220,7 @@ fn smm5(index: i32, N: &mut Vec<Node>) -> u32 {
         N[RELATIVE_INDEX + i3 as usize].val,
     ))
     .0
-    .overflowing_sub(Tmap[index as usize])
+    .overflowing_sub(TMAP[index as usize])
     .0;
 }
 
@@ -407,9 +407,9 @@ fn first_round(M: &mut [u32; 32], N: &mut Vec<Node>, diff_table: [u32; 68]) {
                     .0
                     .overflowing_add(M[i])
                     .0
-                    .overflowing_add(Tmap[i])
+                    .overflowing_add(TMAP[i])
                     .0,
-                    Smap[i],
+                    SMAP[i],
                 ))
                 .0;
             // println!("{}", N[RELATIVE_INDEX + i].val );
@@ -429,9 +429,9 @@ fn first_round(M: &mut [u32; 32], N: &mut Vec<Node>, diff_table: [u32; 68]) {
                     .0
                     .overflowing_add(M[i])
                     .0
-                    .overflowing_add(Tmap[i])
+                    .overflowing_add(TMAP[i])
                     .0,
-                    Smap[i],
+                    SMAP[i],
                 ))
                 .0;
             // println!("{}", N[RELATIVE_INDEX + i].val );
@@ -455,9 +455,9 @@ fn first_round(M: &mut [u32; 32], N: &mut Vec<Node>, diff_table: [u32; 68]) {
                     .0
                     .overflowing_add(M[i])
                     .0
-                    .overflowing_add(Tmap[i])
+                    .overflowing_add(TMAP[i])
                     .0,
-                    Smap[i],
+                    SMAP[i],
                 ))
                 .0;
             // println!("\t{}", N[RELATIVE_INDEX + i].Tval);
@@ -527,34 +527,8 @@ fn fcheck_cond(ind: i32, N: &mut Vec<Node>) -> u32 {
             }
         }
     }
-    // println!("\tMOTHERFUCKING FCHECK --> {}", x);
     x
 }
-
-// fn check_cond(ind: i32, N: &mut Vec<Node>) -> i32 {
-//     let mut b1: u32;
-//     let mut b2: u32;
-
-//     for (_, list) in N[RELATIVE_INDEX + ind as usize].list.iter().enumerate() {
-//         // println!("here {}", list.ind);
-//         // println!("CONDITION {:?}", list);
-//         // get bit value at list->ind
-//         b1 = get_bit(N[RELATIVE_INDEX + ind as usize].val, list.ind);
-//         // println!("b1 {}", b1);
-//         if list.cref < 0 {
-//             if b1 != (list.cref + 2) as u32 {
-//                 return 0;
-//             }
-//         } else {
-//             b2 = get_bit(N[RELATIVE_INDEX + list.cref as usize].val, list.crind);
-//             if b1 != (b2 ^ list.add_const as u32) {
-//                 return 0;
-//             }
-//         }
-//     }
-
-//     1
-// }
 
 fn klima1_3(M: &mut [u32; 32], N: &mut Vec<Node>) -> bool {
     let mut rng = rand::thread_rng();
@@ -598,9 +572,9 @@ fn klima1_3(M: &mut [u32; 32], N: &mut Vec<Node>) -> bool {
                 .0
                 .overflowing_add(M[6])
                 .0
-                .overflowing_add(Tmap[17])
+                .overflowing_add(TMAP[17])
                 .0,
-                Smap[17],
+                SMAP[17],
             ))
             .0;
         N[RELATIVE_INDEX + 18].val = N[RELATIVE_INDEX + 17]
@@ -615,9 +589,9 @@ fn klima1_3(M: &mut [u32; 32], N: &mut Vec<Node>) -> bool {
                 .0
                 .overflowing_add(M[11])
                 .0
-                .overflowing_add(Tmap[18])
+                .overflowing_add(TMAP[18])
                 .0,
-                Smap[18],
+                SMAP[18],
             ))
             .0;
         // println!("Count {}", count);
@@ -625,11 +599,11 @@ fn klima1_3(M: &mut [u32; 32], N: &mut Vec<Node>) -> bool {
     false
 }
 
-fn klima4_9(M: &mut [u32; 32], N: &mut Vec<Node>, G_N19: &mut u32) {
-    N[RELATIVE_INDEX + 19].val = *G_N19;
-    *G_N19 += 1;
-    fix_n19(G_N19);
-    // println!("G_N19 {}", G_N19);
+fn klima4_9(M: &mut [u32; 32], N: &mut Vec<Node>, g_n19: &mut u32) {
+    N[RELATIVE_INDEX + 19].val = *g_n19;
+    *g_n19 += 1;
+    fix_n19(g_n19);
+    // println!("g_n19 {}", g_n19);
     // fix this value to satisfy the conditions (one for Klima, a couple
     // more for my modifications)
     // compute M_0 as in step 5 of Klima paper
@@ -662,9 +636,9 @@ fn klima4_9(M: &mut [u32; 32], N: &mut Vec<Node>, G_N19: &mut u32) {
                     N[RELATIVE_INDEX + 65].val,
                 ))
                 .0
-                .overflowing_add(Tmap[0])
+                .overflowing_add(TMAP[0])
                 .0,
-            Smap[0],
+            SMAP[0],
         ))
         .0;
     // compute M_1 as in step 3 of Klima paper
@@ -697,9 +671,9 @@ fn klima4_9(M: &mut [u32; 32], N: &mut Vec<Node>, G_N19: &mut u32) {
                     N[RELATIVE_INDEX + 66].val,
                 ))
                 .0
-                .overflowing_add(Tmap[1])
+                .overflowing_add(TMAP[1])
                 .0,
-            Smap[1],
+            SMAP[1],
         ))
         .0;
     // compute M_2 as in step 3 of Klima paper
@@ -718,7 +692,7 @@ fn klima4_9(M: &mut [u32; 32], N: &mut Vec<Node>, G_N19: &mut u32) {
     .0
     .overflowing_sub(N[RELATIVE_INDEX + 66].val)
     .0
-    .overflowing_sub(Tmap[2])
+    .overflowing_sub(TMAP[2])
     .0;
     // compute M_3 as in step 3 of Klima paper
     M[3] = crs(
@@ -736,7 +710,7 @@ fn klima4_9(M: &mut [u32; 32], N: &mut Vec<Node>, G_N19: &mut u32) {
     .0
     .overflowing_sub(N[RELATIVE_INDEX + 67].val)
     .0
-    .overflowing_sub(Tmap[3])
+    .overflowing_sub(TMAP[3])
     .0;
     // compute M_4 as in step 3 of Klima paper
     M[4] = crs(
@@ -754,7 +728,7 @@ fn klima4_9(M: &mut [u32; 32], N: &mut Vec<Node>, G_N19: &mut u32) {
     .0
     .overflowing_sub(N[RELATIVE_INDEX + 0].val)
     .0
-    .overflowing_sub(Tmap[4])
+    .overflowing_sub(TMAP[4])
     .0;
     // compute M_5 as in step 3 of Klima paper
     M[5] = crs(
@@ -772,7 +746,7 @@ fn klima4_9(M: &mut [u32; 32], N: &mut Vec<Node>, G_N19: &mut u32) {
     .0
     .overflowing_sub(N[RELATIVE_INDEX + 1].val)
     .0
-    .overflowing_sub(Tmap[5])
+    .overflowing_sub(TMAP[5])
     .0;
     N[RELATIVE_INDEX + 20].val = N[RELATIVE_INDEX + 19]
         .val
@@ -799,15 +773,15 @@ fn klima4_9(M: &mut [u32; 32], N: &mut Vec<Node>, G_N19: &mut u32) {
     //     M[5]
     // );
     if fcheck_cond(20, N) != 0 {
-        *G_N19 += 0x7f;
-        fix_n19(G_N19);
-        N[RELATIVE_INDEX + 19].val = *G_N19;
-        // println!("{} {}", N[RELATIVE_INDEX + 19].val, *G_N19);
+        *g_n19 += 0x7f;
+        fix_n19(g_n19);
+        N[RELATIVE_INDEX + 19].val = *g_n19;
+        // println!("{} {}", N[RELATIVE_INDEX + 19].val, *g_n19);
     }
     // println!(" ========= end klima 4_9 ========= ");
 }
 
-fn first_block(M: &mut [u32; 32], N: &mut Vec<Node>, dt: [u32; 68], G_N19: &mut u32) {
+fn first_block(M: &mut [u32; 32], N: &mut Vec<Node>, dt: [u32; 68], g_n19: &mut u32) {
     // Store IV in appropriate data structures
     N[RELATIVE_INDEX + 64].val = IV[0];
     N[RELATIVE_INDEX - 4].val = IV[0];
@@ -842,7 +816,7 @@ fn first_block(M: &mut [u32; 32], N: &mut Vec<Node>, dt: [u32; 68], G_N19: &mut 
     //     println!("i M {}", M[i]);
     // }
     // klima1_3(M, N);
-    // klima4_9(M, N, G_N19);
+    // klima4_9(M, N, g_n19);
     // println!("DONE WITH KLIMA 4_9");
     // for i in 0..72 {
     //     println!(
@@ -867,24 +841,24 @@ fn first_block(M: &mut [u32; 32], N: &mut Vec<Node>, dt: [u32; 68], G_N19: &mut 
 
     // // iterating over possible values for N[19], check to see if all
     // // other differentials/conditions hold
-    klima4_9(M, N, G_N19);
+    klima4_9(M, N, g_n19);
     let mut stepno = check_diffs(M, N, 20, dt);
     // println!("Stepno {}", stepno);
     // panic!();
 
     while stepno >= 0 {
-        if *G_N19 >= 0x80000000 {
+        if *g_n19 >= 0x80000000 {
             // println!("\tG TOO MUCH {}", stepno);
-            *G_N19 = 0;
+            *g_n19 = 0;
             while klima1_3(M, N) {
                 new_randM(M);
                 first_round(M, N, dt);
             }
         }
         // iterate over values of N[19]
-        klima4_9(M, N, G_N19);
+        klima4_9(M, N, g_n19);
         stepno = check_diffs(M, N, 20, dt);
-        // println!("Stepno {} - G_N19 {}", stepno, G_N19);
+        // println!("Stepno {} - g_n19 {}", stepno, g_n19);
     }
     // println!("BRUV SUCCESS - stepno {}", stepno);
 }
@@ -936,11 +910,11 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
                     )
                     .overflowing_add(N[RELATIVE_INDEX + i - 4].val)
                     .0
-                    .overflowing_add(M[Mmap[i] as usize])
+                    .overflowing_add(M[MMAP[i] as usize])
                     .0
-                    .overflowing_add(Tmap[i])
+                    .overflowing_add(TMAP[i])
                     .0,
-                    Smap[i],
+                    SMAP[i],
                 ))
                 .0;
             // println!(
@@ -960,11 +934,11 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
             //         )
             //         .overflowing_add(N[RELATIVE_INDEX + i - 4].Tval)
             //         .0
-            //         .overflowing_add(Mprime[Mmap[i] as usize])
+            //         .overflowing_add(Mprime[MMAP[i] as usize])
             //         .0
-            //         .overflowing_add(Tmap[i])
+            //         .overflowing_add(TMAP[i])
             //         .0,
-            //         Smap[i],
+            //         SMAP[i],
             //     )
             // );
 
@@ -978,11 +952,11 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
                     )
                     .overflowing_add(N[RELATIVE_INDEX + i - 4].Tval)
                     .0
-                    .overflowing_add(Mprime[Mmap[i] as usize])
+                    .overflowing_add(Mprime[MMAP[i] as usize])
                     .0
-                    .overflowing_add(Tmap[i])
+                    .overflowing_add(TMAP[i])
                     .0,
-                    Smap[i],
+                    SMAP[i],
                 ))
                 .0;
 
@@ -1015,11 +989,11 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
                 )
                 .overflowing_add(N[RELATIVE_INDEX + i - 4].val)
                 .0
-                .overflowing_add(M[Mmap[i] as usize])
+                .overflowing_add(M[MMAP[i] as usize])
                 .0
-                .overflowing_add(Tmap[i])
+                .overflowing_add(TMAP[i])
                 .0,
-                Smap[i],
+                SMAP[i],
             ))
             .0;
 
@@ -1033,11 +1007,11 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
                 )
                 .overflowing_add(N[RELATIVE_INDEX + i - 4].Tval)
                 .0
-                .overflowing_add(Mprime[Mmap[i] as usize])
+                .overflowing_add(Mprime[MMAP[i] as usize])
                 .0
-                .overflowing_add(Tmap[i])
+                .overflowing_add(TMAP[i])
                 .0,
-                Smap[i],
+                SMAP[i],
             ))
             .0;
         if N[RELATIVE_INDEX + i]
@@ -1061,11 +1035,11 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
                 )
                 .overflowing_add(N[RELATIVE_INDEX + i - 4].val)
                 .0
-                .overflowing_add(M[Mmap[i] as usize])
+                .overflowing_add(M[MMAP[i] as usize])
                 .0
-                .overflowing_add(Tmap[i])
+                .overflowing_add(TMAP[i])
                 .0,
-                Smap[i],
+                SMAP[i],
             ))
             .0;
 
@@ -1079,11 +1053,11 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
                 )
                 .overflowing_add(N[RELATIVE_INDEX + i - 4].Tval)
                 .0
-                .overflowing_add(Mprime[Mmap[i] as usize])
+                .overflowing_add(Mprime[MMAP[i] as usize])
                 .0
-                .overflowing_add(Tmap[i])
+                .overflowing_add(TMAP[i])
                 .0,
-                Smap[i],
+                SMAP[i],
             ))
             .0;
 
@@ -1103,11 +1077,11 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
                 )
                 .overflowing_add(N[RELATIVE_INDEX + i - 4].val)
                 .0
-                .overflowing_add(M[Mmap[i] as usize])
+                .overflowing_add(M[MMAP[i] as usize])
                 .0
-                .overflowing_add(Tmap[i])
+                .overflowing_add(TMAP[i])
                 .0,
-                Smap[i],
+                SMAP[i],
             ))
             .0;
 
@@ -1121,11 +1095,11 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
                 )
                 .overflowing_add(N[RELATIVE_INDEX + i - 4].Tval)
                 .0
-                .overflowing_add(Mprime[Mmap[i] as usize])
+                .overflowing_add(Mprime[MMAP[i] as usize])
                 .0
-                .overflowing_add(Tmap[i])
+                .overflowing_add(TMAP[i])
                 .0,
-                Smap[i],
+                SMAP[i],
             ))
             .0;
 
@@ -1150,11 +1124,11 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
                 )
                 .overflowing_add(N[RELATIVE_INDEX + i - 4].val)
                 .0
-                .overflowing_add(M[Mmap[i] as usize])
+                .overflowing_add(M[MMAP[i] as usize])
                 .0
-                .overflowing_add(Tmap[i])
+                .overflowing_add(TMAP[i])
                 .0,
-                Smap[i],
+                SMAP[i],
             ))
             .0;
 
@@ -1168,11 +1142,11 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
                 )
                 .overflowing_add(N[RELATIVE_INDEX + i - 4].Tval)
                 .0
-                .overflowing_add(Mprime[Mmap[i] as usize])
+                .overflowing_add(Mprime[MMAP[i] as usize])
                 .0
-                .overflowing_add(Tmap[i])
+                .overflowing_add(TMAP[i])
                 .0,
-                Smap[i],
+                SMAP[i],
             ))
             .0;
     }
@@ -1229,7 +1203,7 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
 }
 
 fn block1() -> [u32; 4] {
-    let mut G_N19: u32 = 0;
+    let mut g_n19: u32 = 0;
 
     let mut rng = rand::thread_rng();
 
@@ -1242,9 +1216,9 @@ fn block1() -> [u32; 4] {
     for i in 0..16 {
         M[i] = rng.gen();
     }
-    first_block(&mut M, &mut re, dt, &mut G_N19);
+    first_block(&mut M, &mut re, dt, &mut g_n19);
     while check_diffs(&mut M, &mut re, 0, dt) > -1 {
-        first_block(&mut M, &mut re, dt, &mut G_N19);
+        first_block(&mut M, &mut re, dt, &mut g_n19);
     }
     println!(
         "\n\tChaining value: {:x}{:x}{:x}{:x}",
@@ -1371,8 +1345,8 @@ fn RL(var: u32, num: i32) -> u32 {
 
 fn findx(Q: &mut [u32; 68], M: &mut [u32; 16], Mprime: &mut [u32; 16]) {
     for i in 4..20 {
-        M[i - 4] = RR((Q[i].overflowing_sub(Q[i - 1]).0), Smap[i - 4])
-            .overflowing_sub(Tmap[i - 4])
+        M[i - 4] = RR((Q[i].overflowing_sub(Q[i - 1]).0), SMAP[i - 4])
+            .overflowing_sub(TMAP[i - 4])
             .0
             .overflowing_sub(Q[i - 4])
             .0
@@ -1401,9 +1375,9 @@ fn md5step20(
         t = a
             .overflowing_add(
                 ((b & c) | ((!b) & d))
-                    .overflowing_add(M[Mmap[j] as usize])
+                    .overflowing_add(M[MMAP[j] as usize])
                     .0
-                    .overflowing_add(Tmap[j])
+                    .overflowing_add(TMAP[j])
                     .0,
             )
             .0;
@@ -1411,24 +1385,24 @@ fn md5step20(
         d = c;
         c = b;
         a = temp;
-        t1 = t >> (32 - Smap[j]);
-        b = b.overflowing_add((t << Smap[j]).overflowing_add(t1).0).0;
+        t1 = t >> (32 - SMAP[j]);
+        b = b.overflowing_add((t << SMAP[j]).overflowing_add(t1).0).0;
         vals[j + 4] = b;
     }
     for j in 16..21 {
         t = a
             .overflowing_add((b & d) | (c & !d))
             .0
-            .overflowing_add(M[Mmap[j] as usize])
+            .overflowing_add(M[MMAP[j] as usize])
             .0
-            .overflowing_add(Tmap[j])
+            .overflowing_add(TMAP[j])
             .0;
         let mut temp = d;
         d = c;
         c = b;
         a = temp;
-        t1 = t >> (32 - Smap[j]);
-        b = b.overflowing_add((t << Smap[j]).overflowing_add(t1).0).0;
+        t1 = t >> (32 - SMAP[j]);
+        b = b.overflowing_add((t << SMAP[j]).overflowing_add(t1).0).0;
         vals[j + 4] = b;
     }
     a = vals1[0];
@@ -1441,32 +1415,32 @@ fn md5step20(
         t = a
             .overflowing_add((b & c) | ((!b) & d))
             .0
-            .overflowing_add(Mprime[Mmap[j] as usize])
+            .overflowing_add(Mprime[MMAP[j] as usize])
             .0
-            .overflowing_add(Tmap[j])
+            .overflowing_add(TMAP[j])
             .0;
         let mut temp = d;
         d = c;
         c = b;
         a = temp;
-        t1 = t >> (32 - Smap[j]);
-        b = b.overflowing_add((t << Smap[j]) + t1).0;
+        t1 = t >> (32 - SMAP[j]);
+        b = b.overflowing_add((t << SMAP[j]) + t1).0;
         vals1[j + 4] = b;
     }
     for j in 16..21 {
         t = a
             .overflowing_add((b & d) | (c & !d))
             .0
-            .overflowing_add(Mprime[Mmap[j] as usize])
+            .overflowing_add(Mprime[MMAP[j] as usize])
             .0
-            .overflowing_add(Tmap[j])
+            .overflowing_add(TMAP[j])
             .0;
         let mut temp = d;
         d = c;
         c = b;
         a = temp;
-        t1 = t >> (32 - Smap[j]);
-        b = b.overflowing_add((t << Smap[j]).overflowing_add(t1).0).0;
+        t1 = t >> (32 - SMAP[j]);
+        b = b.overflowing_add((t << SMAP[j]).overflowing_add(t1).0).0;
         vals1[j + 4] = b;
     }
 }
@@ -1642,25 +1616,25 @@ fn md5step(
     t = out[j]
         .overflowing_add(cover_func(out[j + 3], out[j + 2], out[j + 1], j))
         .0
-        .overflowing_add(M[Mmap[j] as usize])
+        .overflowing_add(M[MMAP[j] as usize])
         .0
-        .overflowing_add(Tmap[j])
+        .overflowing_add(TMAP[j])
         .0;
-    t1 = t >> (32 - Smap[j]);
+    t1 = t >> (32 - SMAP[j]);
     t1 = out[j + 3]
-        .overflowing_add((t << Smap[j]).overflowing_add(t1).0)
+        .overflowing_add((t << SMAP[j]).overflowing_add(t1).0)
         .0;
     out[j + 4] = t1;
     t = out1[j]
         .overflowing_add(cover_func(out1[j + 3], out1[j + 2], out1[j + 1], j))
         .0
-        .overflowing_add(Mprime[Mmap[j] as usize])
+        .overflowing_add(Mprime[MMAP[j] as usize])
         .0
-        .overflowing_add(Tmap[j])
+        .overflowing_add(TMAP[j])
         .0;
-    t1 = t >> (32 - Smap[j]);
+    t1 = t >> (32 - SMAP[j]);
     t1 = out1[j + 3]
-        .overflowing_add((t << Smap[j]).overflowing_add(t1).0)
+        .overflowing_add((t << SMAP[j]).overflowing_add(t1).0)
         .0;
     out1[j + 4] = t1;
 }
@@ -1732,8 +1706,8 @@ fn multiMessage2(
                 && ((Q[14] ^ Q[15]) & 0xff000000) == 0
             {
                 for i in 7..16 {
-                    M[i] = RR(Q[i + 4].overflowing_sub(Q[i + 3]).0, Smap[i])
-                        .overflowing_sub(Tmap[i])
+                    M[i] = RR(Q[i + 4].overflowing_sub(Q[i + 3]).0, SMAP[i])
+                        .overflowing_sub(TMAP[i])
                         .0
                         .overflowing_sub(Q[i])
                         .0
@@ -1859,8 +1833,8 @@ fn multiMessage2(
             }
 
             for p in 8..14 {
-                M[p] = RR(Q[p + 4].overflowing_sub(Q[p + 3]).0, Smap[p])
-                    .overflowing_sub(Tmap[p])
+                M[p] = RR(Q[p + 4].overflowing_sub(Q[p + 3]).0, SMAP[p])
+                    .overflowing_sub(TMAP[p])
                     .0
                     .overflowing_sub(Q[p])
                     .0
@@ -1872,12 +1846,12 @@ fn multiMessage2(
             md5step20(M, Q, Mprime, Qprime);
             for k in 21..64 {
                 md5step(M, Q, Mprime, Qprime, k);
-                if ((Q[k + 4] ^ Qprime[k + 4]) != differences[k]) {
+                if (Q[k + 4] ^ Qprime[k + 4]) != DIFFERENCES[k] {
                     truth = false;
                     break;
                 }
             }
-            if (truth) {
+            if truth {
                 let val64 = Q[64] + Q[0];
                 let val65 = Q[65] + Q[1];
                 let val66 = Q[66] + Q[2];
@@ -1887,10 +1861,10 @@ fn multiMessage2(
                 let val166 = Qprime[66] + Qprime[2];
                 let val167 = Qprime[67] + Qprime[3];
 
-                if ((val64 ^ val164) == 0
+                if (val64 ^ val164) == 0
                     && (val65 ^ val165) == 0
                     && (val66 ^ val166) == 0
-                    && (val67 ^ val167) == 0)
+                    && (val67 ^ val167) == 0
                 {
                     return true;
                 }
