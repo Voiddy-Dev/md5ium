@@ -32,22 +32,13 @@ const Tmap: [u32; 64] = [
 ];
 
 const differences: [u32; 64] = [
-	0x82000000,0x82000020,0xfe3f18e0,0x8600003e,
-	0x80001fc1,0x80330000,0x980003c0,0x87838000,
-	0x800003c3,0x80001000,0x80000000,0x800fe080,
-	0xff000000,0x80000000,0x80008008,0xa0000000,
-	0x80000000, 0x80000000, 0x80020000, 0x80000000,
-	0x80000000, 0x80000000, 0, 0,
-	0,0,0,0,
-	0,0,0,0,
-	0,0,0x80000000, 0x80000000,
-	0x80000000, 0x80000000, 0x80000000, 0x80000000,
-	0x80000000, 0x80000000, 0x80000000, 0x80000000,
-	0x80000000, 0x80000000, 0x80000000, 0x80000000,
-	0x80000000, 0x80000000, 0x80000000, 0x80000000,
-	0x80000000, 0x80000000, 0x80000000, 0x80000000,
-	0x80000000, 0x80000000, 0x80000000, 0x80000000,
-	0x80000000, 0x82000000, 0x82000000, 0x86000000
+    0x82000000, 0x82000020, 0xfe3f18e0, 0x8600003e, 0x80001fc1, 0x80330000, 0x980003c0, 0x87838000,
+    0x800003c3, 0x80001000, 0x80000000, 0x800fe080, 0xff000000, 0x80000000, 0x80008008, 0xa0000000,
+    0x80000000, 0x80000000, 0x80020000, 0x80000000, 0x80000000, 0x80000000, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000,
+    0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000,
+    0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000,
+    0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x82000000, 0x82000000, 0x86000000,
 ];
 
 #[inline]
@@ -491,7 +482,7 @@ fn first_round(M: &mut [u32; 32], N: &mut Vec<Node>, diff_table: [u32; 68]) {
         // println!("{} {} {}", M[4], M[11], M[14]);
         // panic!();
     }
-    println!("Done with first round");
+    // println!("Done with first round");
 }
 
 fn new_randM(M: &mut [u32; 32]) {
@@ -569,7 +560,7 @@ fn klima1_3(M: &mut [u32; 32], N: &mut Vec<Node>) -> bool {
     let mut rng = rand::thread_rng();
     let mut x: u32;
 
-    println!("AT KLIMA 1_3");
+    // println!("AT KLIMA 1_3");
 
     N[RELATIVE_INDEX + 17].val = 0;
     let mut count = 0;
@@ -878,12 +869,12 @@ fn first_block(M: &mut [u32; 32], N: &mut Vec<Node>, dt: [u32; 68], G_N19: &mut 
     // // other differentials/conditions hold
     klima4_9(M, N, G_N19);
     let mut stepno = check_diffs(M, N, 20, dt);
-    println!("Stepno {}", stepno);
+    // println!("Stepno {}", stepno);
     // panic!();
 
     while stepno >= 0 {
         if *G_N19 >= 0x80000000 {
-            println!("\tG TOO MUCH {}", stepno);
+            // println!("\tG TOO MUCH {}", stepno);
             *G_N19 = 0;
             while klima1_3(M, N) {
                 new_randM(M);
@@ -895,7 +886,7 @@ fn first_block(M: &mut [u32; 32], N: &mut Vec<Node>, dt: [u32; 68], G_N19: &mut 
         stepno = check_diffs(M, N, 20, dt);
         // println!("Stepno {} - G_N19 {}", stepno, G_N19);
     }
-    println!("BRUV SUCCESS - stepno {}", stepno);
+    // println!("BRUV SUCCESS - stepno {}", stepno);
 }
 
 fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) -> i32 {
@@ -1380,12 +1371,18 @@ fn RL(var: u32, num: i32) -> u32 {
 
 fn findx(Q: &mut [u32; 68], M: &mut [u32; 16], Mprime: &mut [u32; 16]) {
     for i in 4..20 {
-        M[i - 4] = RR((Q[i] - Q[i - 1]), Smap[i - 4]) - Tmap[i - 4] - Q[i - 4] - phi(Q, i);
+        M[i - 4] = RR((Q[i].overflowing_sub(Q[i - 1]).0), Smap[i - 4])
+            .overflowing_sub(Tmap[i - 4])
+            .0
+            .overflowing_sub(Q[i - 4])
+            .0
+            .overflowing_sub(phi(Q, i))
+            .0;
         Mprime[i - 4] = M[i - 4];
     }
-    Mprime[4] = Mprime[4] - 0x80000000;
-    Mprime[11] = Mprime[11] - 0x8000;
-    Mprime[14] = Mprime[14] - 0x80000000;
+    Mprime[4] = Mprime[4].overflowing_sub(0x80000000).0;
+    Mprime[11] = Mprime[11].overflowing_sub(0x8000).0;
+    Mprime[14] = Mprime[14].overflowing_sub(0x80000000).0;
 }
 
 fn md5step20(
@@ -1401,23 +1398,37 @@ fn md5step20(
     let mut t;
     let mut t1;
     for j in 0..16 {
-        t = a + ((b & c) | ((!b) & d)) + M[Mmap[j] as usize] + Tmap[j];
+        t = a
+            .overflowing_add(
+                ((b & c) | ((!b) & d))
+                    .overflowing_add(M[Mmap[j] as usize])
+                    .0
+                    .overflowing_add(Tmap[j])
+                    .0,
+            )
+            .0;
         let mut temp = d;
         d = c;
         c = b;
         a = temp;
         t1 = t >> (32 - Smap[j]);
-        b = b + ((t << Smap[j]) + t1);
+        b = b.overflowing_add((t << Smap[j]).overflowing_add(t1).0).0;
         vals[j + 4] = b;
     }
     for j in 16..21 {
-        t = a + ((b & d) | (c & !d)) + M[Mmap[j] as usize] + Tmap[j];
+        t = a
+            .overflowing_add((b & d) | (c & !d))
+            .0
+            .overflowing_add(M[Mmap[j] as usize])
+            .0
+            .overflowing_add(Tmap[j])
+            .0;
         let mut temp = d;
         d = c;
         c = b;
         a = temp;
         t1 = t >> (32 - Smap[j]);
-        b = b + ((t << Smap[j]) + t1);
+        b = b.overflowing_add((t << Smap[j]).overflowing_add(t1).0).0;
         vals[j + 4] = b;
     }
     a = vals1[0];
@@ -1427,23 +1438,35 @@ fn md5step20(
     // t;
     // t1;
     for j in 0..16 {
-        t = a + ((b & c) | ((!b) & d)) + Mprime[Mmap[j] as usize] + Tmap[j];
+        t = a
+            .overflowing_add((b & c) | ((!b) & d))
+            .0
+            .overflowing_add(Mprime[Mmap[j] as usize])
+            .0
+            .overflowing_add(Tmap[j])
+            .0;
         let mut temp = d;
         d = c;
         c = b;
         a = temp;
         t1 = t >> (32 - Smap[j]);
-        b = b + ((t << Smap[j]) + t1);
+        b = b.overflowing_add((t << Smap[j]) + t1).0;
         vals1[j + 4] = b;
     }
     for j in 16..21 {
-        t = a + ((b & d) | (c & !d)) + Mprime[Mmap[j] as usize] + Tmap[j];
+        t = a
+            .overflowing_add((b & d) | (c & !d))
+            .0
+            .overflowing_add(Mprime[Mmap[j] as usize])
+            .0
+            .overflowing_add(Tmap[j])
+            .0;
         let mut temp = d;
         d = c;
         c = b;
         a = temp;
         t1 = t >> (32 - Smap[j]);
-        b = b + ((t << Smap[j]) + t1);
+        b = b.overflowing_add((t << Smap[j]).overflowing_add(t1).0).0;
         vals1[j + 4] = b;
     }
 }
@@ -1509,16 +1532,26 @@ fn block2(CV: [u32; 4]) {
     let mut Qprime: [u32; 68] = [0; 68];
 
     Q[0] = CV[0];
-    Q[1] = CV[1];
+    Q[1] = CV[3];
     Q[2] = CV[2];
-    Q[3] = CV[3];
+    Q[3] = CV[1];
 
     Qprime[0] = Q[0] ^ (0x80000000);
     Qprime[1] = Q[1] ^ (0x82000000);
     Qprime[2] = Q[2] ^ (0x86000000);
     Qprime[3] = Q[3] ^ (0x82000000);
 
+    // println!("Qprime: {:?}", Qprime);
+
     let cond: [[u32; 3]; 309] = build_condition_list_block_2("./data/md5cond_2.txt".to_string());
+    // satisfy_stationary(&mut Q,1, cond);
+    // let mut M: [u32; 16] = [0; 16];
+    // let mut Mprime: [u32; 16] = [0; 16];
+    // findx(&mut Q, &mut M, &mut Mprime);
+    // md5step20(&mut M, &mut Q, &mut Mprime, &mut Qprime);
+    // println!("M: {:?}", Q);
+    // println!("M': {:?}", Qprime);
+
     let mut messageFound = false;
     while !messageFound {
         let mut b = true;
@@ -1570,9 +1603,66 @@ fn block2(CV: [u32; 4]) {
 
         messageFound = multiMessage2(&mut M, &mut Mprime, &mut Q, &mut Qprime);
         if messageFound {
-            println!("BRUV SUCC");
+            println!(
+                "Block2ChainingValue: {:x}{:x}{:x}{:x}",
+                Q[64] + Q[0],
+                Q[67] + Q[3],
+                Q[66] + Q[2],
+                Q[65] + Q[1]
+            );
+            print!("M\t");
+            for i in 0..15 {
+                if i % 4 == 0 && i != 0 {
+                    print!("\n\t");
+                }
+                print!("{:x}, ", M[i]);
+            }
+            print!("{:x}\n\n", M[15]);
+            print!("M'\t");
+            for i in 0..15 {
+                if i % 4 == 0 && i != 0 {
+                    print!("\n\t");
+                }
+                print!("{:x}, ", Mprime[i]);
+            }
+            print!("{:x}\n\n", Mprime[15]);
         }
     }
+}
+
+fn md5step(
+    M: &mut [u32; 16],
+    out: &mut [u32; 68],
+    Mprime: &mut [u32; 16],
+    out1: &mut [u32; 68],
+    j: usize,
+) {
+    let mut t;
+    let mut t1;
+    t = out[j]
+        .overflowing_add(cover_func(out[j + 3], out[j + 2], out[j + 1], j))
+        .0
+        .overflowing_add(M[Mmap[j] as usize])
+        .0
+        .overflowing_add(Tmap[j])
+        .0;
+    t1 = t >> (32 - Smap[j]);
+    t1 = out[j + 3]
+        .overflowing_add((t << Smap[j]).overflowing_add(t1).0)
+        .0;
+    out[j + 4] = t1;
+    t = out1[j]
+        .overflowing_add(cover_func(out1[j + 3], out1[j + 2], out1[j + 1], j))
+        .0
+        .overflowing_add(Mprime[Mmap[j] as usize])
+        .0
+        .overflowing_add(Tmap[j])
+        .0;
+    t1 = t >> (32 - Smap[j]);
+    t1 = out1[j + 3]
+        .overflowing_add((t << Smap[j]).overflowing_add(t1).0)
+        .0;
+    out1[j + 4] = t1;
 }
 
 fn multiMessage2(
@@ -1624,20 +1714,37 @@ fn multiMessage2(
             }
 
             //calculate Q[11]
-            Q[15] = Q[14] + RL(phi(Q, 15) + 0x895cd7be + M[11] + Q[11], 22);
+            Q[15] = Q[14]
+                .overflowing_add(RL(
+                    phi(Q, 15)
+                        .overflowing_add(0x895cd7be)
+                        .0
+                        .overflowing_add(M[11])
+                        .0
+                        .overflowing_add(Q[11])
+                        .0,
+                    22,
+                ))
+                .0;
 
-            if ((Q[15] & 0xfff81fff) == Q[15]
+            if (Q[15] & 0xfff81fff) == Q[15]
                 && (Q[15] | 0x00081080) == Q[15]
-                && ((Q[14] ^ Q[15]) & 0xff000000) == 0)
+                && ((Q[14] ^ Q[15]) & 0xff000000) == 0
             {
                 for i in 7..16 {
-                    M[i] = RR(Q[i + 4] - Q[i + 3], Smap[i]) - Tmap[i] - Q[i] - phi(Q, i + 4);
+                    M[i] = RR(Q[i + 4].overflowing_sub(Q[i + 3]).0, Smap[i])
+                        .overflowing_sub(Tmap[i])
+                        .0
+                        .overflowing_sub(Q[i])
+                        .0
+                        .overflowing_sub(phi(Q, i + 4))
+                        .0;
                 }
                 for v in 7..16 {
                     Mprime[v] = M[v];
                 }
-                Mprime[11] = Mprime[11] - 0x8000;
-                Mprime[14] = Mprime[14] - 0x80000000;
+                Mprime[11] = Mprime[11].overflowing_sub(0x8000).0;
+                Mprime[14] = Mprime[14].overflowing_sub(0x80000000).0;
                 md5step20(M, Q, Mprime, Qprime);
             }
         }
@@ -1752,7 +1859,13 @@ fn multiMessage2(
             }
 
             for p in 8..14 {
-                M[p] = RR(Q[p + 4] - Q[p + 3], Smap[p]) - Tmap[p] - Q[p] - phi(Q, p + 4);
+                M[p] = RR(Q[p + 4].overflowing_sub(Q[p + 3]).0, Smap[p])
+                    .overflowing_sub(Tmap[p])
+                    .0
+                    .overflowing_sub(Q[p])
+                    .0
+                    .overflowing_sub(phi(Q, p + 4))
+                    .0;
                 Mprime[p] = M[p];
             }
             Mprime[11] = Mprime[11] - 0x8000;
@@ -1789,6 +1902,6 @@ fn multiMessage2(
 
 fn main() {
     println!("---==[md5ium]==---");
-    let CV: [u32; 4] = [0x72fedf07, 0xe8668655, 0xd260ed33, 0x9cac6ebe]; //block1();
+    let CV: [u32; 4] = block1();
     block2(CV);
 }
