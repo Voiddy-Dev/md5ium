@@ -1,6 +1,6 @@
 use rand::Rng;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 
 const IV: [u32; 4] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476];
 const RELATIVE_INDEX: usize = 4;
@@ -1202,7 +1202,7 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
     return -1;
 }
 
-fn block1() -> [u32; 4] {
+fn block1() -> ([u32; 4], [u32; 32], [u32; 32]) {
     let mut g_n19: u32 = 0;
 
     let mut rng = rand::thread_rng();
@@ -1221,7 +1221,7 @@ fn block1() -> [u32; 4] {
         first_block(&mut M, &mut re, dt, &mut g_n19);
     }
     println!(
-        "\n\tChaining value: {:x}{:x}{:x}{:x}",
+        "\nBlock1ChainingValue: {:x}{:x}{:x}{:x}",
         re[RELATIVE_INDEX + 68].val,
         re[RELATIVE_INDEX + 71].val,
         re[RELATIVE_INDEX + 70].val,
@@ -1237,6 +1237,9 @@ fn block1() -> [u32; 4] {
         print!("{:x}, ", M[i]);
     }
     print!("{:x}\n\n", M[15]);
+    let mut Mbefore: [u32; 32] = [0; 32];
+    Mbefore.copy_from_slice(&M);
+
     M[4] = addsub_bit(M[4], 31, 1);
     M[11] = addsub_bit(M[11], 15, 1);
     M[14] = addsub_bit(M[14], 31, 1);
@@ -1249,12 +1252,16 @@ fn block1() -> [u32; 4] {
     }
     print!("{:x}\n\n", M[15]);
 
-    return [
-        re[RELATIVE_INDEX + 68].val,
-        re[RELATIVE_INDEX + 71].val,
-        re[RELATIVE_INDEX + 70].val,
-        re[RELATIVE_INDEX + 69].val,
-    ];
+    return (
+        [
+            re[RELATIVE_INDEX + 68].val,
+            re[RELATIVE_INDEX + 71].val,
+            re[RELATIVE_INDEX + 70].val,
+            re[RELATIVE_INDEX + 69].val,
+        ],
+        Mbefore,
+        M,
+    );
 }
 
 fn satisfy_stationary(Q: &mut [u32; 68], type1: i32, cond: [[u32; 3]; 309]) {
@@ -1494,13 +1501,8 @@ fn check_stationary(Q: [u32; 68], m: i32, k: i32, cond: [[u32; 3]; 309]) -> bool
     return true;
 }
 
-fn block2(CV: [u32; 4]) {
+fn block2(CV: [u32; 4]) -> ([u32; 16], [u32; 16]) {
     let mut rng = rand::thread_rng();
-
-    println!(
-        "ChainingValue: {:x}{:x}{:x}{:x}",
-        CV[0], CV[1], CV[2], CV[3]
-    );
 
     let mut Q: [u32; 68] = [0; 68];
     let mut Qprime: [u32; 68] = [0; 68];
@@ -1600,8 +1602,12 @@ fn block2(CV: [u32; 4]) {
                 print!("{:x}, ", Mprime[i]);
             }
             print!("{:x}\n\n", Mprime[15]);
+
+            return (M, Mprime);
         }
     }
+    panic!("Block 2 failed");
+    // return ([0; 16], [0; 16]);
 }
 
 fn md5step(
@@ -1874,8 +1880,15 @@ fn multiMessage2(
     return false;
 }
 
-fn main() {
+fn main(){
     println!("---==[md5ium]==---");
-    let CV: [u32; 4] = block1();
-    block2(CV);
+    let mut cv_and_blocks1: ([u32; 4], [u32; 32], [u32; 32]) = block1();
+    let blocks2: ([u32; 16], [u32; 16]) = block2(cv_and_blocks1.0);
+    for i in 16..32 {
+        cv_and_blocks1.1[i] = blocks2.0[i-16];
+        cv_and_blocks1.2[i] = blocks2.1[i-16];
+    }
+    println!();
+    println!("Block 1: {:?}", cv_and_blocks1.1);
+    println!("Block 2: {:?}", cv_and_blocks1.2);
 }
