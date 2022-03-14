@@ -1,6 +1,6 @@
 use rand::Rng;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader};
 
 const IV: [u32; 4] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476];
 const RELATIVE_INDEX: usize = 4;
@@ -100,39 +100,39 @@ fn set_bit(x: u32, i: i32, b: i32) -> u32 {
 
 // Round functions for MD5
 #[inline]
-fn F(x: u32, y: u32, z: u32) -> u32 {
+fn md5_f(x: u32, y: u32, z: u32) -> u32 {
     (x & y) | (!x & z)
 }
 #[inline]
-fn G(x: u32, y: u32, z: u32) -> u32 {
+fn md5_g(x: u32, y: u32, z: u32) -> u32 {
     return (x & z) | (y & (!z));
 }
 #[inline]
-fn H(x: u32, y: u32, z: u32) -> u32 {
+fn md5_h(x: u32, y: u32, z: u32) -> u32 {
     return x ^ y ^ z;
 }
 #[inline]
-fn I(x: u32, y: u32, z: u32) -> u32 {
+fn md5_i(x: u32, y: u32, z: u32) -> u32 {
     return y ^ (x | (!z));
 }
 
 #[inline]
 fn cover_func(b: u32, c: u32, d: u32, i: usize) -> u32 {
     if i < 16 {
-        return F(b, c, d);
+        return md5_f(b, c, d);
     }
     if i < 32 {
-        return G(b, c, d);
+        return md5_g(b, c, d);
     }
     if i < 48 {
-        return H(b, c, d);
+        return md5_h(b, c, d);
     }
-    return I(b, c, d);
+    return md5_i(b, c, d);
 }
 
 #[inline]
-fn phi(Q: &mut [u32; 68], i: usize) -> u32 {
-    return cover_func(Q[i - 1], Q[i - 2], Q[i - 3], i - 4);
+fn phi(q_cond_nodes: &mut [u32; 68], i: usize) -> u32 {
+    return cover_func(q_cond_nodes[i - 1], q_cond_nodes[i - 2], q_cond_nodes[i - 3], i - 4);
 }
 
 #[derive(Debug)]
@@ -146,7 +146,7 @@ struct Condition {
 #[derive(Debug)]
 struct Node {
     val: u32,
-    Tval: u32,
+    tval: u32,
     bf: [u32; 4],
     list: Vec<Condition>,
 }
@@ -155,14 +155,14 @@ impl Default for Node {
     fn default() -> Node {
         Node {
             val: 0,
-            Tval: 0,
+            tval: 0,
             bf: [0, 0, 0, 0],
             list: Vec::new(),
         }
     }
 }
 
-fn smm5(index: i32, N: &mut Vec<Node>) -> u32 {
+fn smm5(index: i32, n_cond_nodes: &mut Vec<Node>) -> u32 {
     let mut y: u32;
     let mut b2: i32; // might be u32????
     let mut i1: i32;
@@ -170,9 +170,9 @@ fn smm5(index: i32, N: &mut Vec<Node>) -> u32 {
     let mut i3: i32;
     let mut i4: i32;
 
-    let mut x = N[RELATIVE_INDEX + index as usize].val;
+    let mut x = n_cond_nodes[RELATIVE_INDEX + index as usize].val;
     // println!("First x: {}", x);
-    for el in &N[RELATIVE_INDEX + index as usize].list {
+    for el in &n_cond_nodes[RELATIVE_INDEX + index as usize].list {
         // println!("\tlist {} ", el.cref);
         if el.cref < 0
         // condition of form a_i,j = 0/1
@@ -182,13 +182,13 @@ fn smm5(index: i32, N: &mut Vec<Node>) -> u32 {
         } else
         // condition of form a_i,j = b_k,l
         {
-            y = N[RELATIVE_INDEX + el.cref as usize].val;
+            y = n_cond_nodes[RELATIVE_INDEX + el.cref as usize].val;
             b2 = get_bit(y, el.crind) as i32;
             x = set_bit(x, el.ind, b2);
             // println!("\tx2 --> {}", x);
         }
     }
-    N[RELATIVE_INDEX + index as usize].val = x;
+    n_cond_nodes[RELATIVE_INDEX + index as usize].val = x;
     // println!("X: {} - index: {}", x, RELATIVE_INDEX + index as usize);
     i1 = index - 1;
     i2 = index - 2;
@@ -209,24 +209,24 @@ fn smm5(index: i32, N: &mut Vec<Node>) -> u32 {
     // println!("{} {} {} {}", i1, i2, i3, i4);
     // recompute correct message value for updated value of x
     return crs(
-        x.overflowing_sub(N[RELATIVE_INDEX + i1 as usize].val).0,
+        x.overflowing_sub(n_cond_nodes[RELATIVE_INDEX + i1 as usize].val).0,
         SMAP[index as usize],
     )
-    .overflowing_sub(N[RELATIVE_INDEX + i4 as usize].val)
+    .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + i4 as usize].val)
     .0
-    .overflowing_sub(F(
-        N[RELATIVE_INDEX + i1 as usize].val,
-        N[RELATIVE_INDEX + i2 as usize].val,
-        N[RELATIVE_INDEX + i3 as usize].val,
+    .overflowing_sub(md5_f(
+        n_cond_nodes[RELATIVE_INDEX + i1 as usize].val,
+        n_cond_nodes[RELATIVE_INDEX + i2 as usize].val,
+        n_cond_nodes[RELATIVE_INDEX + i3 as usize].val,
     ))
     .0
     .overflowing_sub(TMAP[index as usize])
     .0;
 }
 
-fn build_bitfield(N: &mut Vec<Node>) {
+fn build_bitfield(n_cond_nodes: &mut Vec<Node>) {
     let mut count = 0;
-    for el in N {
+    for el in n_cond_nodes {
         if count >= RELATIVE_INDEX {
             let mut list_iter = el.list.iter();
             while let Some(li) = list_iter.next() {
@@ -387,7 +387,7 @@ fn construct_diff_table() -> [u32; 68] {
     diff_table
 }
 
-fn first_round(M: &mut [u32; 32], N: &mut Vec<Node>, diff_table: [u32; 68]) {
+fn first_round(m_block: &mut [u32; 32], n_cond_nodes: &mut Vec<Node>, diff_table: [u32; 68]) {
     let mut flag: i32 = 0;
 
     while flag == 0 {
@@ -395,132 +395,127 @@ fn first_round(M: &mut [u32; 32], N: &mut Vec<Node>, diff_table: [u32; 68]) {
 
         for i in 0..16 {
             // Do initial computation
-            N[RELATIVE_INDEX + i].val = N[RELATIVE_INDEX + i - 1]
+            n_cond_nodes[RELATIVE_INDEX + i].val = n_cond_nodes[RELATIVE_INDEX + i - 1]
                 .val
                 .overflowing_add(cls(
-                    F(
-                        N[RELATIVE_INDEX + i - 1].val,
-                        N[RELATIVE_INDEX + i - 2].val,
-                        N[RELATIVE_INDEX + i - 3].val,
+                    md5_f(
+                        n_cond_nodes[RELATIVE_INDEX + i - 1].val,
+                        n_cond_nodes[RELATIVE_INDEX + i - 2].val,
+                        n_cond_nodes[RELATIVE_INDEX + i - 3].val,
                     )
-                    .overflowing_add(N[RELATIVE_INDEX + i - 4].val)
+                    .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].val)
                     .0
-                    .overflowing_add(M[i])
+                    .overflowing_add(m_block[i])
                     .0
                     .overflowing_add(TMAP[i])
                     .0,
                     SMAP[i],
                 ))
                 .0;
-            // println!("{}", N[RELATIVE_INDEX + i].val );
+            // println!("{}", n_cond_nodes[RELATIVE_INDEX + i].val );
             // perform single-message modifications
-            M[i] = smm5(i as i32, N);
-            // println!("{}",  M[i] );
+            m_block[i] = smm5(i as i32, n_cond_nodes);
+            // println!("{}",  m_block[i] );
             // re-comupte value from new message value
-            N[RELATIVE_INDEX + i].val = N[RELATIVE_INDEX + i - 1]
+            n_cond_nodes[RELATIVE_INDEX + i].val = n_cond_nodes[RELATIVE_INDEX + i - 1]
                 .val
                 .overflowing_add(cls(
-                    F(
-                        N[RELATIVE_INDEX + i - 1].val,
-                        N[RELATIVE_INDEX + i - 2].val,
-                        N[RELATIVE_INDEX + i - 3].val,
+                    md5_f(
+                        n_cond_nodes[RELATIVE_INDEX + i - 1].val,
+                        n_cond_nodes[RELATIVE_INDEX + i - 2].val,
+                        n_cond_nodes[RELATIVE_INDEX + i - 3].val,
                     )
-                    .overflowing_add(N[RELATIVE_INDEX + i - 4].val)
+                    .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].val)
                     .0
-                    .overflowing_add(M[i])
+                    .overflowing_add(m_block[i])
                     .0
                     .overflowing_add(TMAP[i])
                     .0,
                     SMAP[i],
                 ))
                 .0;
-            // println!("{}", N[RELATIVE_INDEX + i].val );
+            // println!("{}", n_cond_nodes[RELATIVE_INDEX + i].val );
             // println!("");
         }
         // compute offsets to compute differentials
-        M[4] = addsub_bit(M[4], 31, 1);
-        M[11] = addsub_bit(M[11], 15, 1);
-        M[14] = addsub_bit(M[14], 31, 1);
+        m_block[4] = addsub_bit(m_block[4], 31, 1);
+        m_block[11] = addsub_bit(m_block[11], 15, 1);
+        m_block[14] = addsub_bit(m_block[14], 31, 1);
 
         for i in 0..16 {
-            N[RELATIVE_INDEX + i].Tval = N[RELATIVE_INDEX + i - 1]
-                .Tval
+            n_cond_nodes[RELATIVE_INDEX + i].tval = n_cond_nodes[RELATIVE_INDEX + i - 1]
+                .tval
                 .overflowing_add(cls(
-                    F(
-                        N[RELATIVE_INDEX + i - 1].Tval,
-                        N[RELATIVE_INDEX + i - 2].Tval,
-                        N[RELATIVE_INDEX + i - 3].Tval,
+                    md5_f(
+                        n_cond_nodes[RELATIVE_INDEX + i - 1].tval,
+                        n_cond_nodes[RELATIVE_INDEX + i - 2].tval,
+                        n_cond_nodes[RELATIVE_INDEX + i - 3].tval,
                     )
-                    .overflowing_add(N[RELATIVE_INDEX + i - 4].Tval)
+                    .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].tval)
                     .0
-                    .overflowing_add(M[i])
+                    .overflowing_add(m_block[i])
                     .0
                     .overflowing_add(TMAP[i])
                     .0,
                     SMAP[i],
                 ))
                 .0;
-            // println!("\t{}", N[RELATIVE_INDEX + i].Tval);
 
             // If differential isn't satisfied...
             // this doesn't occur very often because the enhanced
             // conditions are *almost* sufficient, but sometimes it does
-            if N[RELATIVE_INDEX + i]
-                .Tval
-                .overflowing_sub(N[RELATIVE_INDEX + i].val)
+            if n_cond_nodes[RELATIVE_INDEX + i]
+                .tval
+                .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + i].val)
                 .0
                 != diff_table[i]
             {
                 flag = 0;
-                new_randM(M);
-                // panic!("BITCH IT RANDOMIZED");
+                new_rand_mblock(m_block);
             }
         }
-        M[4] = addsub_bit(M[4], 31, -1);
-        M[11] = addsub_bit(M[11], 15, -1);
-        M[14] = addsub_bit(M[14], 31, -1);
-        // println!("{} {} {}", M[4], M[11], M[14]);
-        // panic!();
+        m_block[4] = addsub_bit(m_block[4], 31, -1);
+        m_block[11] = addsub_bit(m_block[11], 15, -1);
+        m_block[14] = addsub_bit(m_block[14], 31, -1);
     }
-    // println!("Done with first round");
 }
 
-fn new_randM(M: &mut [u32; 32]) {
+fn new_rand_mblock(m_block: &mut [u32; 32]) {
     let mut temp: [u32; 32] = [0; 32];
-    temp.copy_from_slice(M);
+    temp.copy_from_slice(m_block);
     let mut rng = rand::thread_rng();
     for i in 0..16 {
-        M[i] = rng.gen();
+        m_block[i] = rng.gen();
     }
-    assert_ne!(&mut temp, M);
+    assert_ne!(&mut temp, m_block);
 }
 
-fn fcheck_cond(ind: i32, N: &mut Vec<Node>) -> u32 {
+fn fcheck_cond(ind: i32, n_cond_nodes: &mut Vec<Node>) -> u32 {
     let mut x: u32 = 0;
-    x |= (!N[RELATIVE_INDEX + ind as usize].val) & N[RELATIVE_INDEX + ind as usize].bf[0];
+    x |= (!n_cond_nodes[RELATIVE_INDEX + ind as usize].val) & n_cond_nodes[RELATIVE_INDEX + ind as usize].bf[0];
     // println!(
     //     "{} {} {} {} {} {}",
     //     x,
-    //     N[RELATIVE_INDEX + ind as usize].val,
-    //     N[RELATIVE_INDEX + ind as usize].bf[0],
-    //     N[RELATIVE_INDEX + ind as usize].bf[1],
-    //     N[RELATIVE_INDEX + ind as usize].bf[2],
-    //     N[RELATIVE_INDEX + ind as usize].bf[3]
+    //     n_cond_nodes[RELATIVE_INDEX + ind as usize].val,
+    //     n_cond_nodes[RELATIVE_INDEX + ind as usize].bf[0],
+    //     n_cond_nodes[RELATIVE_INDEX + ind as usize].bf[1],
+    //     n_cond_nodes[RELATIVE_INDEX + ind as usize].bf[2],
+    //     n_cond_nodes[RELATIVE_INDEX + ind as usize].bf[3]
     // );
-    x |= N[RELATIVE_INDEX + ind as usize].val & N[RELATIVE_INDEX + ind as usize].bf[1];
-    // println!("{} {} ", x, N[RELATIVE_INDEX + ind as usize - 1].val);
-    x |= (N[RELATIVE_INDEX + ind as usize - 1].val & N[RELATIVE_INDEX + ind as usize].bf[2])
-        ^ (N[RELATIVE_INDEX + ind as usize].val & N[RELATIVE_INDEX + ind as usize].bf[2]);
-    // println!("{} {}", x, N[RELATIVE_INDEX + ind as usize].bf[3]);
-    if N[RELATIVE_INDEX + ind as usize].bf[3] != 0 {
-        let list_iter = N[RELATIVE_INDEX + ind as usize].list.iter();
+    x |= n_cond_nodes[RELATIVE_INDEX + ind as usize].val & n_cond_nodes[RELATIVE_INDEX + ind as usize].bf[1];
+    // println!("{} {} ", x, n_cond_nodes[RELATIVE_INDEX + ind as usize - 1].val);
+    x |= (n_cond_nodes[RELATIVE_INDEX + ind as usize - 1].val & n_cond_nodes[RELATIVE_INDEX + ind as usize].bf[2])
+        ^ (n_cond_nodes[RELATIVE_INDEX + ind as usize].val & n_cond_nodes[RELATIVE_INDEX + ind as usize].bf[2]);
+    // println!("{} {}", x, n_cond_nodes[RELATIVE_INDEX + ind as usize].bf[3]);
+    if n_cond_nodes[RELATIVE_INDEX + ind as usize].bf[3] != 0 {
+        let list_iter = n_cond_nodes[RELATIVE_INDEX + ind as usize].list.iter();
         let li = list_iter.last();
         match li {
             Some(list) => {
                 // println!("YEAH RIGHT HERE {:?}", list);
-                x |= (!(N[list.crind as usize].val) & N[RELATIVE_INDEX + ind as usize].bf[3])
-                    ^ (N[RELATIVE_INDEX + ind as usize].val
-                        & N[RELATIVE_INDEX + ind as usize].bf[2]);
+                x |= (!(n_cond_nodes[list.crind as usize].val) & n_cond_nodes[RELATIVE_INDEX + ind as usize].bf[3])
+                    ^ (n_cond_nodes[RELATIVE_INDEX + ind as usize].val
+                        & n_cond_nodes[RELATIVE_INDEX + ind as usize].bf[2]);
             }
             _ => {
                 panic!("BRUV LI MUST BE SOME");
@@ -530,64 +525,64 @@ fn fcheck_cond(ind: i32, N: &mut Vec<Node>) -> u32 {
     x
 }
 
-fn klima1_3(M: &mut [u32; 32], N: &mut Vec<Node>) -> bool {
+fn klima1_3(m_block: &mut [u32; 32], n_cond_nodes: &mut Vec<Node>) -> bool {
     let mut rng = rand::thread_rng();
     let mut x: u32;
 
     // println!("AT KLIMA 1_3");
 
-    N[RELATIVE_INDEX + 17].val = 0;
+    n_cond_nodes[RELATIVE_INDEX + 17].val = 0;
     let mut count = 0;
-    // println!("Check cond {} {}",  check_cond(18, N), check_cond(18, N) != 0); //, fcheck_cond(18, N));
-    while (fcheck_cond(17, N) != 0) || (fcheck_cond(18, N) != 0) {
+    // println!("Check cond {} {}",  check_cond(18, n_cond_nodes), check_cond(18, n_cond_nodes) != 0); //, fcheck_cond(18, n_cond_nodes));
+    while (fcheck_cond(17, n_cond_nodes) != 0) || (fcheck_cond(18, n_cond_nodes) != 0) {
         count += 1;
         if count > 4096 {
             return true;
         }
 
-        N[RELATIVE_INDEX + 16].val = rng.gen();
-        x = N[RELATIVE_INDEX + 16].val;
-        for (_, list) in N[RELATIVE_INDEX + 16 as usize].list.iter().enumerate() {
+        n_cond_nodes[RELATIVE_INDEX + 16].val = rng.gen();
+        x = n_cond_nodes[RELATIVE_INDEX + 16].val;
+        for (_, list) in n_cond_nodes[RELATIVE_INDEX + 16 as usize].list.iter().enumerate() {
             if list.cref < 0 {
                 x = set_bit(x, list.ind, list.cref + 2);
             } else {
                 x = set_bit(
                     x,
                     list.ind,
-                    get_bit(N[RELATIVE_INDEX + list.cref as usize].val, list.crind) as i32,
+                    get_bit(n_cond_nodes[RELATIVE_INDEX + list.cref as usize].val, list.crind) as i32,
                 );
             }
         }
 
-        N[RELATIVE_INDEX + 16].val = x;
-        N[RELATIVE_INDEX + 17].val = N[RELATIVE_INDEX + 16]
+        n_cond_nodes[RELATIVE_INDEX + 16].val = x;
+        n_cond_nodes[RELATIVE_INDEX + 17].val = n_cond_nodes[RELATIVE_INDEX + 16]
             .val
             .overflowing_add(cls(
-                G(
-                    N[RELATIVE_INDEX + 16].val,
-                    N[RELATIVE_INDEX + 15].val,
-                    N[RELATIVE_INDEX + 14].val,
+                md5_g(
+                    n_cond_nodes[RELATIVE_INDEX + 16].val,
+                    n_cond_nodes[RELATIVE_INDEX + 15].val,
+                    n_cond_nodes[RELATIVE_INDEX + 14].val,
                 )
-                .overflowing_add(N[RELATIVE_INDEX + 13].val)
+                .overflowing_add(n_cond_nodes[RELATIVE_INDEX + 13].val)
                 .0
-                .overflowing_add(M[6])
+                .overflowing_add(m_block[6])
                 .0
                 .overflowing_add(TMAP[17])
                 .0,
                 SMAP[17],
             ))
             .0;
-        N[RELATIVE_INDEX + 18].val = N[RELATIVE_INDEX + 17]
+        n_cond_nodes[RELATIVE_INDEX + 18].val = n_cond_nodes[RELATIVE_INDEX + 17]
             .val
             .overflowing_add(cls(
-                G(
-                    N[RELATIVE_INDEX + 17].val,
-                    N[RELATIVE_INDEX + 16].val,
-                    N[RELATIVE_INDEX + 15].val,
+                md5_g(
+                    n_cond_nodes[RELATIVE_INDEX + 17].val,
+                    n_cond_nodes[RELATIVE_INDEX + 16].val,
+                    n_cond_nodes[RELATIVE_INDEX + 15].val,
                 )
-                .overflowing_add(N[RELATIVE_INDEX + 14].val)
+                .overflowing_add(n_cond_nodes[RELATIVE_INDEX + 14].val)
                 .0
-                .overflowing_add(M[11])
+                .overflowing_add(m_block[11])
                 .0
                 .overflowing_add(TMAP[18])
                 .0,
@@ -599,41 +594,41 @@ fn klima1_3(M: &mut [u32; 32], N: &mut Vec<Node>) -> bool {
     false
 }
 
-fn klima4_9(M: &mut [u32; 32], N: &mut Vec<Node>, g_n19: &mut u32) {
-    N[RELATIVE_INDEX + 19].val = *g_n19;
+fn klima4_9(m_block: &mut [u32; 32], n_cond_nodes: &mut Vec<Node>, g_n19: &mut u32) {
+    n_cond_nodes[RELATIVE_INDEX + 19].val = *g_n19;
     *g_n19 += 1;
     fix_n19(g_n19);
     // println!("g_n19 {}", g_n19);
     // fix this value to satisfy the conditions (one for Klima, a couple
     // more for my modifications)
     // compute M_0 as in step 5 of Klima paper
-    M[0] = crs(
-        N[RELATIVE_INDEX + 19]
+    m_block[0] = crs(
+        n_cond_nodes[RELATIVE_INDEX + 19]
             .val
-            .overflowing_sub(N[RELATIVE_INDEX + 18].val)
+            .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 18].val)
             .0,
         20,
     )
-    .overflowing_sub(G(
-        N[RELATIVE_INDEX + 18].val,
-        N[RELATIVE_INDEX + 17].val,
-        N[RELATIVE_INDEX + 16].val,
+    .overflowing_sub(md5_g(
+        n_cond_nodes[RELATIVE_INDEX + 18].val,
+        n_cond_nodes[RELATIVE_INDEX + 17].val,
+        n_cond_nodes[RELATIVE_INDEX + 16].val,
     ))
     .0
-    .overflowing_sub(N[RELATIVE_INDEX + 15].val)
+    .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 15].val)
     .0
     .overflowing_sub(0xe9b6c7aa)
     .0;
-    // compute N[0].val using step function
-    N[RELATIVE_INDEX + 0].val = N[RELATIVE_INDEX + 67]
+    // compute n_cond_nodes[0].val using step function
+    n_cond_nodes[RELATIVE_INDEX + 0].val = n_cond_nodes[RELATIVE_INDEX + 67]
         .val
         .overflowing_add(cls(
-            M[0].overflowing_add(N[RELATIVE_INDEX + 64].val)
+            m_block[0].overflowing_add(n_cond_nodes[RELATIVE_INDEX + 64].val)
                 .0
-                .overflowing_add(F(
-                    N[RELATIVE_INDEX + 67].val,
-                    N[RELATIVE_INDEX + 66].val,
-                    N[RELATIVE_INDEX + 65].val,
+                .overflowing_add(md5_f(
+                    n_cond_nodes[RELATIVE_INDEX + 67].val,
+                    n_cond_nodes[RELATIVE_INDEX + 66].val,
+                    n_cond_nodes[RELATIVE_INDEX + 65].val,
                 ))
                 .0
                 .overflowing_add(TMAP[0])
@@ -642,33 +637,33 @@ fn klima4_9(M: &mut [u32; 32], N: &mut Vec<Node>, g_n19: &mut u32) {
         ))
         .0;
     // compute M_1 as in step 3 of Klima paper
-    M[1] = crs(
-        N[RELATIVE_INDEX + 16]
+    m_block[1] = crs(
+        n_cond_nodes[RELATIVE_INDEX + 16]
             .val
-            .overflowing_sub(N[RELATIVE_INDEX + 15].val)
+            .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 15].val)
             .0,
         5,
     )
-    .overflowing_sub(G(
-        N[RELATIVE_INDEX + 15].val,
-        N[RELATIVE_INDEX + 14].val,
-        N[RELATIVE_INDEX + 13].val,
+    .overflowing_sub(md5_g(
+        n_cond_nodes[RELATIVE_INDEX + 15].val,
+        n_cond_nodes[RELATIVE_INDEX + 14].val,
+        n_cond_nodes[RELATIVE_INDEX + 13].val,
     ))
     .0
-    .overflowing_sub(N[RELATIVE_INDEX + 12].val)
+    .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 12].val)
     .0
     .overflowing_sub(0xf61e2562)
     .0;
-    // compute N[1].val using step function
-    N[RELATIVE_INDEX + 1].val = N[RELATIVE_INDEX + 0]
+    // compute n_cond_nodes[1].val using step function
+    n_cond_nodes[RELATIVE_INDEX + 1].val = n_cond_nodes[RELATIVE_INDEX + 0]
         .val
         .overflowing_add(cls(
-            M[1].overflowing_add(N[RELATIVE_INDEX + 65].val)
+            m_block[1].overflowing_add(n_cond_nodes[RELATIVE_INDEX + 65].val)
                 .0
-                .overflowing_add(F(
-                    N[RELATIVE_INDEX + 0].val,
-                    N[RELATIVE_INDEX + 67].val,
-                    N[RELATIVE_INDEX + 66].val,
+                .overflowing_add(md5_f(
+                    n_cond_nodes[RELATIVE_INDEX + 0].val,
+                    n_cond_nodes[RELATIVE_INDEX + 67].val,
+                    n_cond_nodes[RELATIVE_INDEX + 66].val,
                 ))
                 .0
                 .overflowing_add(TMAP[1])
@@ -677,86 +672,86 @@ fn klima4_9(M: &mut [u32; 32], N: &mut Vec<Node>, g_n19: &mut u32) {
         ))
         .0;
     // compute M_2 as in step 3 of Klima paper
-    M[2] = crs(
-        N[RELATIVE_INDEX + 2]
+    m_block[2] = crs(
+        n_cond_nodes[RELATIVE_INDEX + 2]
             .val
-            .overflowing_sub(N[RELATIVE_INDEX + 1].val)
+            .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 1].val)
             .0,
         17,
     )
-    .overflowing_sub(F(
-        N[RELATIVE_INDEX + 1].val,
-        N[RELATIVE_INDEX + 0].val,
-        N[RELATIVE_INDEX + 67].val,
+    .overflowing_sub(md5_f(
+        n_cond_nodes[RELATIVE_INDEX + 1].val,
+        n_cond_nodes[RELATIVE_INDEX + 0].val,
+        n_cond_nodes[RELATIVE_INDEX + 67].val,
     ))
     .0
-    .overflowing_sub(N[RELATIVE_INDEX + 66].val)
+    .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 66].val)
     .0
     .overflowing_sub(TMAP[2])
     .0;
     // compute M_3 as in step 3 of Klima paper
-    M[3] = crs(
-        N[RELATIVE_INDEX + 3]
+    m_block[3] = crs(
+        n_cond_nodes[RELATIVE_INDEX + 3]
             .val
-            .overflowing_sub(N[RELATIVE_INDEX + 2].val)
+            .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 2].val)
             .0,
         22,
     )
-    .overflowing_sub(F(
-        N[RELATIVE_INDEX + 2].val,
-        N[RELATIVE_INDEX + 1].val,
-        N[RELATIVE_INDEX + 0].val,
+    .overflowing_sub(md5_f(
+        n_cond_nodes[RELATIVE_INDEX + 2].val,
+        n_cond_nodes[RELATIVE_INDEX + 1].val,
+        n_cond_nodes[RELATIVE_INDEX + 0].val,
     ))
     .0
-    .overflowing_sub(N[RELATIVE_INDEX + 67].val)
+    .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 67].val)
     .0
     .overflowing_sub(TMAP[3])
     .0;
     // compute M_4 as in step 3 of Klima paper
-    M[4] = crs(
-        N[RELATIVE_INDEX + 4]
+    m_block[4] = crs(
+        n_cond_nodes[RELATIVE_INDEX + 4]
             .val
-            .overflowing_sub(N[RELATIVE_INDEX + 3].val)
+            .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 3].val)
             .0,
         7,
     )
-    .overflowing_sub(F(
-        N[RELATIVE_INDEX + 3].val,
-        N[RELATIVE_INDEX + 2].val,
-        N[RELATIVE_INDEX + 1].val,
+    .overflowing_sub(md5_f(
+        n_cond_nodes[RELATIVE_INDEX + 3].val,
+        n_cond_nodes[RELATIVE_INDEX + 2].val,
+        n_cond_nodes[RELATIVE_INDEX + 1].val,
     ))
     .0
-    .overflowing_sub(N[RELATIVE_INDEX + 0].val)
+    .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 0].val)
     .0
     .overflowing_sub(TMAP[4])
     .0;
     // compute M_5 as in step 3 of Klima paper
-    M[5] = crs(
-        N[RELATIVE_INDEX + 5]
+    m_block[5] = crs(
+        n_cond_nodes[RELATIVE_INDEX + 5]
             .val
-            .overflowing_sub(N[RELATIVE_INDEX + 4].val)
+            .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 4].val)
             .0,
         12,
     )
-    .overflowing_sub(F(
-        N[RELATIVE_INDEX + 4].val,
-        N[RELATIVE_INDEX + 3].val,
-        N[RELATIVE_INDEX + 2].val,
+    .overflowing_sub(md5_f(
+        n_cond_nodes[RELATIVE_INDEX + 4].val,
+        n_cond_nodes[RELATIVE_INDEX + 3].val,
+        n_cond_nodes[RELATIVE_INDEX + 2].val,
     ))
     .0
-    .overflowing_sub(N[RELATIVE_INDEX + 1].val)
+    .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 1].val)
     .0
     .overflowing_sub(TMAP[5])
     .0;
-    N[RELATIVE_INDEX + 20].val = N[RELATIVE_INDEX + 19]
+    n_cond_nodes[RELATIVE_INDEX + 20].val = n_cond_nodes[RELATIVE_INDEX + 19]
         .val
         .overflowing_add(cls(
-            M[5].overflowing_add(N[RELATIVE_INDEX + 16].val)
+            m_block[5].overflowing_add(n_cond_nodes[RELATIVE_INDEX + 16].val)
                 .0
-                .overflowing_add(G(
-                    N[RELATIVE_INDEX + 19].val,
-                    N[RELATIVE_INDEX + 18].val,
-                    N[RELATIVE_INDEX + 17].val,
+                .overflowing_add(md5_g(
+                    n_cond_nodes[RELATIVE_INDEX + 19].val,
+                    n_cond_nodes[RELATIVE_INDEX + 18].val,
+                    n_cond_nodes[RELATIVE_INDEX + 17].val,
                 ))
                 .0
                 .overflowing_add(0xd62f105d)
@@ -766,83 +761,83 @@ fn klima4_9(M: &mut [u32; 32], N: &mut Vec<Node>, g_n19: &mut u32) {
         .0;
     // println!(
     //     "{} {} {} {} {}",
-    //     M[3],
-    //     N[RELATIVE_INDEX + 1].val,
-    //     M[4],
-    //     N[RELATIVE_INDEX + 20].val,
-    //     M[5]
+    //     m_block[3],
+    //     n_cond_nodes[RELATIVE_INDEX + 1].val,
+    //     m_block[4],
+    //     n_cond_nodes[RELATIVE_INDEX + 20].val,
+    //     m_block[5]
     // );
-    if fcheck_cond(20, N) != 0 {
+    if fcheck_cond(20, n_cond_nodes) != 0 {
         *g_n19 += 0x7f;
         fix_n19(g_n19);
-        N[RELATIVE_INDEX + 19].val = *g_n19;
-        // println!("{} {}", N[RELATIVE_INDEX + 19].val, *g_n19);
+        n_cond_nodes[RELATIVE_INDEX + 19].val = *g_n19;
+        // println!("{} {}", n_cond_nodes[RELATIVE_INDEX + 19].val, *g_n19);
     }
     // println!(" ========= end klima 4_9 ========= ");
 }
 
-fn first_block(M: &mut [u32; 32], N: &mut Vec<Node>, dt: [u32; 68], g_n19: &mut u32) {
+fn first_block(m_block: &mut [u32; 32], n_cond_nodes: &mut Vec<Node>, dt: [u32; 68], g_n19: &mut u32) {
     // Store IV in appropriate data structures
-    N[RELATIVE_INDEX + 64].val = IV[0];
-    N[RELATIVE_INDEX - 4].val = IV[0];
-    N[RELATIVE_INDEX - 4].Tval = IV[0];
+    n_cond_nodes[RELATIVE_INDEX + 64].val = IV[0];
+    n_cond_nodes[RELATIVE_INDEX - 4].val = IV[0];
+    n_cond_nodes[RELATIVE_INDEX - 4].tval = IV[0];
 
-    N[RELATIVE_INDEX + 65].val = IV[3];
-    N[RELATIVE_INDEX - 3].val = IV[3];
-    N[RELATIVE_INDEX - 3].Tval = IV[3];
+    n_cond_nodes[RELATIVE_INDEX + 65].val = IV[3];
+    n_cond_nodes[RELATIVE_INDEX - 3].val = IV[3];
+    n_cond_nodes[RELATIVE_INDEX - 3].tval = IV[3];
 
-    N[RELATIVE_INDEX + 66].val = IV[2];
-    N[RELATIVE_INDEX - 2].val = IV[2];
-    N[RELATIVE_INDEX - 2].Tval = IV[2];
+    n_cond_nodes[RELATIVE_INDEX + 66].val = IV[2];
+    n_cond_nodes[RELATIVE_INDEX - 2].val = IV[2];
+    n_cond_nodes[RELATIVE_INDEX - 2].tval = IV[2];
 
-    N[RELATIVE_INDEX + 67].val = IV[1];
-    N[RELATIVE_INDEX - 1].val = IV[1];
-    N[RELATIVE_INDEX - 1].Tval = IV[1];
+    n_cond_nodes[RELATIVE_INDEX + 67].val = IV[1];
+    n_cond_nodes[RELATIVE_INDEX - 1].val = IV[1];
+    n_cond_nodes[RELATIVE_INDEX - 1].tval = IV[1];
 
     // find message such that all first round conditions and differentials
     // are satisfied - this should be fast
     // for i in 0..72 {
-    //     println!("{} {}", N[RELATIVE_INDEX + i].val, N[RELATIVE_INDEX + i].Tval);
+    //     println!("{} {}", n_cond_nodes[RELATIVE_INDEX + i].val, n_cond_nodes[RELATIVE_INDEX + i].tval);
     // }
     // for i in 0..32{
-    //     println!("i M {}", M[i]);
+    //     println!("i m_block {}", m_block[i]);
     // }
     // println!("FIRST ROUND");
-    first_round(M, N, dt);
+    first_round(m_block, n_cond_nodes, dt);
     // for i in 0..72 {
-    //     println!("{} {}", N[RELATIVE_INDEX + i].val, N[RELATIVE_INDEX + i].Tval);
+    //     println!("{} {}", n_cond_nodes[RELATIVE_INDEX + i].val, n_cond_nodes[RELATIVE_INDEX + i].tval);
     // }
     // for i in 0..32{
-    //     println!("i M {}", M[i]);
+    //     println!("i m_block {}", m_block[i]);
     // }
-    // klima1_3(M, N);
-    // klima4_9(M, N, g_n19);
+    // klima1_3(m_block, n_cond_nodes);
+    // klima4_9(m_block, n_cond_nodes, g_n19);
     // println!("DONE WITH KLIMA 4_9");
     // for i in 0..72 {
     //     println!(
-    //         "N[{}]: {} {}",
+    //         "n_cond_nodes[{}]: {} {}",
     //         i,
-    //         N[RELATIVE_INDEX + i].val,
-    //         N[RELATIVE_INDEX + i].Tval
+    //         n_cond_nodes[RELATIVE_INDEX + i].val,
+    //         n_cond_nodes[RELATIVE_INDEX + i].tval
     //     );
     // }
     // for i in 0..32 {
-    //     println!("i M {}", M[i]);
+    //     println!("i m_block {}", m_block[i]);
     // }
     // panic!();
     // do the first setup steps from Klima's code (steps 1-3)
-    while klima1_3(M, N)
+    while klima1_3(m_block, n_cond_nodes)
     // sometimes klima1_3 cannot be completed for
     {
         // certain values of Q_{0-15}
-        new_randM(M);
-        first_round(M, N, dt);
+        new_rand_mblock(m_block);
+        first_round(m_block, n_cond_nodes, dt);
     }
 
-    // // iterating over possible values for N[19], check to see if all
+    // // iterating over possible values for n_cond_nodes[19], check to see if all
     // // other differentials/conditions hold
-    klima4_9(M, N, g_n19);
-    let mut stepno = check_diffs(M, N, 20, dt);
+    klima4_9(m_block, n_cond_nodes, g_n19);
+    let mut stepno = check_diffs(m_block, n_cond_nodes, 20, dt);
     // println!("Stepno {}", stepno);
     // panic!();
 
@@ -850,109 +845,68 @@ fn first_block(M: &mut [u32; 32], N: &mut Vec<Node>, dt: [u32; 68], g_n19: &mut 
         if *g_n19 >= 0x80000000 {
             // println!("\tG TOO MUCH {}", stepno);
             *g_n19 = 0;
-            while klima1_3(M, N) {
-                new_randM(M);
-                first_round(M, N, dt);
+            while klima1_3(m_block, n_cond_nodes) {
+                new_rand_mblock(m_block);
+                first_round(m_block, n_cond_nodes, dt);
             }
         }
-        // iterate over values of N[19]
-        klima4_9(M, N, g_n19);
-        stepno = check_diffs(M, N, 20, dt);
+        // iterate over values of n_cond_nodes[19]
+        klima4_9(m_block, n_cond_nodes, g_n19);
+        stepno = check_diffs(m_block, n_cond_nodes, 20, dt);
         // println!("Stepno {} - g_n19 {}", stepno, g_n19);
     }
     // println!("BRUV SUCCESS - stepno {}", stepno);
 }
 
-fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) -> i32 {
-    let mut Mprime: [u32; 16] = [0; 16];
-    Mprime.copy_from_slice(&M[..16]);
+fn check_diffs(m_block: &mut [u32; 32], n_cond_nodes: &mut Vec<Node>, index: i32, dt: [u32; 68]) -> i32 {
+    let mut m_prime_block: [u32; 16] = [0; 16];
+    m_prime_block.copy_from_slice(&m_block[..16]);
 
     for i in 0..16 {
-        assert_eq!(M[i], Mprime[i]);
+        assert_eq!(m_block[i], m_prime_block[i]);
     }
 
-    Mprime[4] = addsub_bit(Mprime[4], 31, 1);
-    Mprime[11] = addsub_bit(Mprime[11], 15, 1);
-    Mprime[14] = addsub_bit(Mprime[14], 31, 1);
+    m_prime_block[4] = addsub_bit(m_prime_block[4], 31, 1);
+    m_prime_block[11] = addsub_bit(m_prime_block[11], 15, 1);
+    m_prime_block[14] = addsub_bit(m_prime_block[14], 31, 1);
     let mut local_index: usize = index as usize;
-    // println!("Local Index: {}", local_index);
-    // for i in 0..16 {
-    //     println!("Mprime {}", Mprime[i]);
-    // }
-
     if local_index == 20 {
         for i in 15..20 {
-            N[RELATIVE_INDEX + i].Tval = N[RELATIVE_INDEX + i].val.overflowing_add(dt[i]).0;
-            // println!(
-            //     "{} {}",
-            //     N[RELATIVE_INDEX + i].Tval,
-            //     N[RELATIVE_INDEX + i].val
-            // );
+            n_cond_nodes[RELATIVE_INDEX + i].tval = n_cond_nodes[RELATIVE_INDEX + i].val.overflowing_add(dt[i]).0;
         }
     }
 
     if local_index != 20 {
         for i in 0..16 {
-            // println!(
-            //     "{} {} {}",
-            //     N[RELATIVE_INDEX + i].Tval,
-            //     N[RELATIVE_INDEX + i].val,
-            //     dt[i]
-            // );
-
-            N[RELATIVE_INDEX + i].val = N[RELATIVE_INDEX + i - 1]
+            n_cond_nodes[RELATIVE_INDEX + i].val = n_cond_nodes[RELATIVE_INDEX + i - 1]
                 .val
                 .overflowing_add(cls(
-                    F(
-                        N[RELATIVE_INDEX + i - 1].val,
-                        N[RELATIVE_INDEX + i - 2].val,
-                        N[RELATIVE_INDEX + i - 3].val,
+                    md5_f(
+                        n_cond_nodes[RELATIVE_INDEX + i - 1].val,
+                        n_cond_nodes[RELATIVE_INDEX + i - 2].val,
+                        n_cond_nodes[RELATIVE_INDEX + i - 3].val,
                     )
-                    .overflowing_add(N[RELATIVE_INDEX + i - 4].val)
+                    .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].val)
                     .0
-                    .overflowing_add(M[MMAP[i] as usize])
+                    .overflowing_add(m_block[MMAP[i] as usize])
                     .0
                     .overflowing_add(TMAP[i])
                     .0,
                     SMAP[i],
                 ))
                 .0;
-            // println!(
-            //     "\t{} {} {}",
-            //     N[RELATIVE_INDEX + i].Tval,
-            //     N[RELATIVE_INDEX + i].val,
-            //     dt[i]
-            // );
 
-            // println!(
-            //     "\tCLS: {}",
-            //     cls(
-            //         F(
-            //             N[RELATIVE_INDEX + i - 1].Tval,
-            //             N[RELATIVE_INDEX + i - 2].Tval,
-            //             N[RELATIVE_INDEX + i - 3].Tval,
-            //         )
-            //         .overflowing_add(N[RELATIVE_INDEX + i - 4].Tval)
-            //         .0
-            //         .overflowing_add(Mprime[MMAP[i] as usize])
-            //         .0
-            //         .overflowing_add(TMAP[i])
-            //         .0,
-            //         SMAP[i],
-            //     )
-            // );
-
-            N[RELATIVE_INDEX + i].Tval = N[RELATIVE_INDEX + i - 1]
-                .Tval
+            n_cond_nodes[RELATIVE_INDEX + i].tval = n_cond_nodes[RELATIVE_INDEX + i - 1]
+                .tval
                 .overflowing_add(cls(
-                    F(
-                        N[RELATIVE_INDEX + i - 1].Tval,
-                        N[RELATIVE_INDEX + i - 2].Tval,
-                        N[RELATIVE_INDEX + i - 3].Tval,
+                    md5_f(
+                        n_cond_nodes[RELATIVE_INDEX + i - 1].tval,
+                        n_cond_nodes[RELATIVE_INDEX + i - 2].tval,
+                        n_cond_nodes[RELATIVE_INDEX + i - 3].tval,
                     )
-                    .overflowing_add(N[RELATIVE_INDEX + i - 4].Tval)
+                    .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].tval)
                     .0
-                    .overflowing_add(Mprime[MMAP[i] as usize])
+                    .overflowing_add(m_prime_block[MMAP[i] as usize])
                     .0
                     .overflowing_add(TMAP[i])
                     .0,
@@ -960,15 +914,9 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
                 ))
                 .0;
 
-            // println!(
-            //     "{} {} {}",
-            //     N[RELATIVE_INDEX + i].Tval,
-            //     N[RELATIVE_INDEX + i].val,
-            //     dt[i]
-            // );
-            if N[RELATIVE_INDEX + i]
-                .Tval
-                .overflowing_sub(N[RELATIVE_INDEX + i].val)
+            if n_cond_nodes[RELATIVE_INDEX + i]
+                .tval
+                .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + i].val)
                 .0
                 != dt[i]
             {
@@ -979,17 +927,17 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
     }
 
     for i in local_index..32 {
-        N[RELATIVE_INDEX + i].val = N[RELATIVE_INDEX + i - 1]
+        n_cond_nodes[RELATIVE_INDEX + i].val = n_cond_nodes[RELATIVE_INDEX + i - 1]
             .val
             .overflowing_add(cls(
-                G(
-                    N[RELATIVE_INDEX + i - 1].val,
-                    N[RELATIVE_INDEX + i - 2].val,
-                    N[RELATIVE_INDEX + i - 3].val,
+                md5_g(
+                    n_cond_nodes[RELATIVE_INDEX + i - 1].val,
+                    n_cond_nodes[RELATIVE_INDEX + i - 2].val,
+                    n_cond_nodes[RELATIVE_INDEX + i - 3].val,
                 )
-                .overflowing_add(N[RELATIVE_INDEX + i - 4].val)
+                .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].val)
                 .0
-                .overflowing_add(M[MMAP[i] as usize])
+                .overflowing_add(m_block[MMAP[i] as usize])
                 .0
                 .overflowing_add(TMAP[i])
                 .0,
@@ -997,26 +945,26 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
             ))
             .0;
 
-        N[RELATIVE_INDEX + i].Tval = N[RELATIVE_INDEX + i - 1]
-            .Tval
+        n_cond_nodes[RELATIVE_INDEX + i].tval = n_cond_nodes[RELATIVE_INDEX + i - 1]
+            .tval
             .overflowing_add(cls(
-                G(
-                    N[RELATIVE_INDEX + i - 1].Tval,
-                    N[RELATIVE_INDEX + i - 2].Tval,
-                    N[RELATIVE_INDEX + i - 3].Tval,
+                md5_g(
+                    n_cond_nodes[RELATIVE_INDEX + i - 1].tval,
+                    n_cond_nodes[RELATIVE_INDEX + i - 2].tval,
+                    n_cond_nodes[RELATIVE_INDEX + i - 3].tval,
                 )
-                .overflowing_add(N[RELATIVE_INDEX + i - 4].Tval)
+                .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].tval)
                 .0
-                .overflowing_add(Mprime[MMAP[i] as usize])
+                .overflowing_add(m_prime_block[MMAP[i] as usize])
                 .0
                 .overflowing_add(TMAP[i])
                 .0,
                 SMAP[i],
             ))
             .0;
-        if N[RELATIVE_INDEX + i]
-            .Tval
-            .overflowing_sub(N[RELATIVE_INDEX + i].val)
+        if n_cond_nodes[RELATIVE_INDEX + i]
+            .tval
+            .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + i].val)
             .0
             != dt[i]
         {
@@ -1025,17 +973,17 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
     }
 
     for i in 32..48 {
-        N[RELATIVE_INDEX + i].val = N[RELATIVE_INDEX + i - 1]
+        n_cond_nodes[RELATIVE_INDEX + i].val = n_cond_nodes[RELATIVE_INDEX + i - 1]
             .val
             .overflowing_add(cls(
-                H(
-                    N[RELATIVE_INDEX + i - 1].val,
-                    N[RELATIVE_INDEX + i - 2].val,
-                    N[RELATIVE_INDEX + i - 3].val,
+                md5_h(
+                    n_cond_nodes[RELATIVE_INDEX + i - 1].val,
+                    n_cond_nodes[RELATIVE_INDEX + i - 2].val,
+                    n_cond_nodes[RELATIVE_INDEX + i - 3].val,
                 )
-                .overflowing_add(N[RELATIVE_INDEX + i - 4].val)
+                .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].val)
                 .0
-                .overflowing_add(M[MMAP[i] as usize])
+                .overflowing_add(m_block[MMAP[i] as usize])
                 .0
                 .overflowing_add(TMAP[i])
                 .0,
@@ -1043,17 +991,17 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
             ))
             .0;
 
-        N[RELATIVE_INDEX + i].Tval = N[RELATIVE_INDEX + i - 1]
-            .Tval
+        n_cond_nodes[RELATIVE_INDEX + i].tval = n_cond_nodes[RELATIVE_INDEX + i - 1]
+            .tval
             .overflowing_add(cls(
-                H(
-                    N[RELATIVE_INDEX + i - 1].Tval,
-                    N[RELATIVE_INDEX + i - 2].Tval,
-                    N[RELATIVE_INDEX + i - 3].Tval,
+                md5_h(
+                    n_cond_nodes[RELATIVE_INDEX + i - 1].tval,
+                    n_cond_nodes[RELATIVE_INDEX + i - 2].tval,
+                    n_cond_nodes[RELATIVE_INDEX + i - 3].tval,
                 )
-                .overflowing_add(N[RELATIVE_INDEX + i - 4].Tval)
+                .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].tval)
                 .0
-                .overflowing_add(Mprime[MMAP[i] as usize])
+                .overflowing_add(m_prime_block[MMAP[i] as usize])
                 .0
                 .overflowing_add(TMAP[i])
                 .0,
@@ -1061,23 +1009,23 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
             ))
             .0;
 
-        if i > 33 && ((N[RELATIVE_INDEX + i].Tval ^ N[RELATIVE_INDEX + i].val) != 0x80000000) {
+        if i > 33 && ((n_cond_nodes[RELATIVE_INDEX + i].tval ^ n_cond_nodes[RELATIVE_INDEX + i].val) != 0x80000000) {
             return i as i32;
         }
     }
 
     for i in 48..60 {
-        N[RELATIVE_INDEX + i].val = N[RELATIVE_INDEX + i - 1]
+        n_cond_nodes[RELATIVE_INDEX + i].val = n_cond_nodes[RELATIVE_INDEX + i - 1]
             .val
             .overflowing_add(cls(
-                I(
-                    N[RELATIVE_INDEX + i - 1].val,
-                    N[RELATIVE_INDEX + i - 2].val,
-                    N[RELATIVE_INDEX + i - 3].val,
+                md5_i(
+                    n_cond_nodes[RELATIVE_INDEX + i - 1].val,
+                    n_cond_nodes[RELATIVE_INDEX + i - 2].val,
+                    n_cond_nodes[RELATIVE_INDEX + i - 3].val,
                 )
-                .overflowing_add(N[RELATIVE_INDEX + i - 4].val)
+                .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].val)
                 .0
-                .overflowing_add(M[MMAP[i] as usize])
+                .overflowing_add(m_block[MMAP[i] as usize])
                 .0
                 .overflowing_add(TMAP[i])
                 .0,
@@ -1085,17 +1033,17 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
             ))
             .0;
 
-        N[RELATIVE_INDEX + i].Tval = N[RELATIVE_INDEX + i - 1]
-            .Tval
+        n_cond_nodes[RELATIVE_INDEX + i].tval = n_cond_nodes[RELATIVE_INDEX + i - 1]
+            .tval
             .overflowing_add(cls(
-                I(
-                    N[RELATIVE_INDEX + i - 1].Tval,
-                    N[RELATIVE_INDEX + i - 2].Tval,
-                    N[RELATIVE_INDEX + i - 3].Tval,
+                md5_i(
+                    n_cond_nodes[RELATIVE_INDEX + i - 1].tval,
+                    n_cond_nodes[RELATIVE_INDEX + i - 2].tval,
+                    n_cond_nodes[RELATIVE_INDEX + i - 3].tval,
                 )
-                .overflowing_add(N[RELATIVE_INDEX + i - 4].Tval)
+                .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].tval)
                 .0
-                .overflowing_add(Mprime[MMAP[i] as usize])
+                .overflowing_add(m_prime_block[MMAP[i] as usize])
                 .0
                 .overflowing_add(TMAP[i])
                 .0,
@@ -1103,9 +1051,9 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
             ))
             .0;
 
-        if N[RELATIVE_INDEX + i]
-            .Tval
-            .overflowing_sub(N[RELATIVE_INDEX + i].val)
+        if n_cond_nodes[RELATIVE_INDEX + i]
+            .tval
+            .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + i].val)
             .0
             != dt[i]
         {
@@ -1114,17 +1062,17 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
     }
 
     for i in 60..64 {
-        N[RELATIVE_INDEX + i].val = N[RELATIVE_INDEX + i - 1]
+        n_cond_nodes[RELATIVE_INDEX + i].val = n_cond_nodes[RELATIVE_INDEX + i - 1]
             .val
             .overflowing_add(cls(
-                I(
-                    N[RELATIVE_INDEX + i - 1].val,
-                    N[RELATIVE_INDEX + i - 2].val,
-                    N[RELATIVE_INDEX + i - 3].val,
+                md5_i(
+                    n_cond_nodes[RELATIVE_INDEX + i - 1].val,
+                    n_cond_nodes[RELATIVE_INDEX + i - 2].val,
+                    n_cond_nodes[RELATIVE_INDEX + i - 3].val,
                 )
-                .overflowing_add(N[RELATIVE_INDEX + i - 4].val)
+                .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].val)
                 .0
-                .overflowing_add(M[MMAP[i] as usize])
+                .overflowing_add(m_block[MMAP[i] as usize])
                 .0
                 .overflowing_add(TMAP[i])
                 .0,
@@ -1132,17 +1080,17 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
             ))
             .0;
 
-        N[RELATIVE_INDEX + i].Tval = N[RELATIVE_INDEX + i - 1]
-            .Tval
+        n_cond_nodes[RELATIVE_INDEX + i].tval = n_cond_nodes[RELATIVE_INDEX + i - 1]
+            .tval
             .overflowing_add(cls(
-                I(
-                    N[RELATIVE_INDEX + i - 1].Tval,
-                    N[RELATIVE_INDEX + i - 2].Tval,
-                    N[RELATIVE_INDEX + i - 3].Tval,
+                md5_i(
+                    n_cond_nodes[RELATIVE_INDEX + i - 1].tval,
+                    n_cond_nodes[RELATIVE_INDEX + i - 2].tval,
+                    n_cond_nodes[RELATIVE_INDEX + i - 3].tval,
                 )
-                .overflowing_add(N[RELATIVE_INDEX + i - 4].Tval)
+                .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].tval)
                 .0
-                .overflowing_add(Mprime[MMAP[i] as usize])
+                .overflowing_add(m_prime_block[MMAP[i] as usize])
                 .0
                 .overflowing_add(TMAP[i])
                 .0,
@@ -1152,46 +1100,46 @@ fn check_diffs(M: &mut [u32; 32], N: &mut Vec<Node>, index: i32, dt: [u32; 68]) 
     }
 
     // Calculate new chaining variables
-    N[RELATIVE_INDEX + 68].val = N[RELATIVE_INDEX + 60]
+    n_cond_nodes[RELATIVE_INDEX + 68].val = n_cond_nodes[RELATIVE_INDEX + 60]
         .val
-        .overflowing_add(N[RELATIVE_INDEX - 4].val)
+        .overflowing_add(n_cond_nodes[RELATIVE_INDEX - 4].val)
         .0;
-    N[RELATIVE_INDEX + 69].val = N[RELATIVE_INDEX + 61]
+    n_cond_nodes[RELATIVE_INDEX + 69].val = n_cond_nodes[RELATIVE_INDEX + 61]
         .val
-        .overflowing_add(N[RELATIVE_INDEX - 3].val)
+        .overflowing_add(n_cond_nodes[RELATIVE_INDEX - 3].val)
         .0;
-    N[RELATIVE_INDEX + 70].val = N[RELATIVE_INDEX + 62]
+    n_cond_nodes[RELATIVE_INDEX + 70].val = n_cond_nodes[RELATIVE_INDEX + 62]
         .val
-        .overflowing_add(N[RELATIVE_INDEX - 2].val)
+        .overflowing_add(n_cond_nodes[RELATIVE_INDEX - 2].val)
         .0;
-    N[RELATIVE_INDEX + 71].val = N[RELATIVE_INDEX + 63]
+    n_cond_nodes[RELATIVE_INDEX + 71].val = n_cond_nodes[RELATIVE_INDEX + 63]
         .val
-        .overflowing_add(N[RELATIVE_INDEX - 1].val)
+        .overflowing_add(n_cond_nodes[RELATIVE_INDEX - 1].val)
         .0;
-    N[RELATIVE_INDEX + 68].Tval = N[RELATIVE_INDEX + 60]
-        .Tval
-        .overflowing_add(N[RELATIVE_INDEX - 4].val)
+    n_cond_nodes[RELATIVE_INDEX + 68].tval = n_cond_nodes[RELATIVE_INDEX + 60]
+        .tval
+        .overflowing_add(n_cond_nodes[RELATIVE_INDEX - 4].val)
         .0;
-    N[RELATIVE_INDEX + 69].Tval = N[RELATIVE_INDEX + 61]
-        .Tval
-        .overflowing_add(N[RELATIVE_INDEX - 3].val)
+    n_cond_nodes[RELATIVE_INDEX + 69].tval = n_cond_nodes[RELATIVE_INDEX + 61]
+        .tval
+        .overflowing_add(n_cond_nodes[RELATIVE_INDEX - 3].val)
         .0;
-    N[RELATIVE_INDEX + 70].Tval = N[RELATIVE_INDEX + 62]
-        .Tval
-        .overflowing_add(N[RELATIVE_INDEX - 2].val)
+    n_cond_nodes[RELATIVE_INDEX + 70].tval = n_cond_nodes[RELATIVE_INDEX + 62]
+        .tval
+        .overflowing_add(n_cond_nodes[RELATIVE_INDEX - 2].val)
         .0;
-    N[RELATIVE_INDEX + 71].Tval = N[RELATIVE_INDEX + 63]
-        .Tval
-        .overflowing_add(N[RELATIVE_INDEX - 1].val)
+    n_cond_nodes[RELATIVE_INDEX + 71].tval = n_cond_nodes[RELATIVE_INDEX + 63]
+        .tval
+        .overflowing_add(n_cond_nodes[RELATIVE_INDEX - 1].val)
         .0;
 
     for i in 69..72 {
-        if fcheck_cond(i, N) != 0 {
+        if fcheck_cond(i, n_cond_nodes) != 0 {
             return i;
         }
-        if N[RELATIVE_INDEX + i as usize]
-            .Tval
-            .overflowing_sub(N[RELATIVE_INDEX + i as usize].val)
+        if n_cond_nodes[RELATIVE_INDEX + i as usize]
+            .tval
+            .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + i as usize].val)
             .0
             != dt[i as usize - 4]
         {
@@ -1212,13 +1160,13 @@ fn block1() -> ([u32; 4], [u32; 32], [u32; 32]) {
     build_bitfield(&mut re);
     let dt = construct_diff_table();
     // Initial random message
-    let mut M: [u32; 32] = [0; 32];
+    let mut m_block: [u32; 32] = [0; 32];
     for i in 0..16 {
-        M[i] = rng.gen();
+        m_block[i] = rng.gen();
     }
-    first_block(&mut M, &mut re, dt, &mut g_n19);
-    while check_diffs(&mut M, &mut re, 0, dt) > -1 {
-        first_block(&mut M, &mut re, dt, &mut g_n19);
+    first_block(&mut m_block, &mut re, dt, &mut g_n19);
+    while check_diffs(&mut m_block, &mut re, 0, dt) > -1 {
+        first_block(&mut m_block, &mut re, dt, &mut g_n19);
     }
     println!(
         "\nBlock1ChainingValue: {:x}{:x}{:x}{:x}",
@@ -1228,29 +1176,29 @@ fn block1() -> ([u32; 4], [u32; 32], [u32; 32]) {
         re[RELATIVE_INDEX + 69].val
     );
 
-    // Printing out message
-    print!("M\t");
-    for i in 0..15 {
-        if i % 4 == 0 && i != 0 {
-            print!("\n\t");
-        }
-        print!("{:x}, ", M[i]);
-    }
-    print!("{:x}\n\n", M[15]);
-    let mut Mbefore: [u32; 32] = [0; 32];
-    Mbefore.copy_from_slice(&M);
+    // // Printing out message
+    // print!("m_block\t");
+    // for i in 0..15 {
+    //     if i % 4 == 0 && i != 0 {
+    //         print!("\n_cond_nodes\t");
+    //     }
+    //     print!("{:x}, ", m_block[i]);
+    // }
+    // print!("{:x}\n_cond_nodes\n_cond_nodes", m_block[15]);
+    let mut m_block_before: [u32; 32] = [0; 32];
+    m_block_before.copy_from_slice(&m_block);
 
-    M[4] = addsub_bit(M[4], 31, 1);
-    M[11] = addsub_bit(M[11], 15, 1);
-    M[14] = addsub_bit(M[14], 31, 1);
-    print!("M'\t");
-    for i in 0..15 {
-        if i % 4 == 0 && i != 0 {
-            print!("\n\t");
-        }
-        print!("{:x}, ", M[i]);
-    }
-    print!("{:x}\n\n", M[15]);
+    m_block[4] = addsub_bit(m_block[4], 31, 1);
+    m_block[11] = addsub_bit(m_block[11], 15, 1);
+    m_block[14] = addsub_bit(m_block[14], 31, 1);
+    // print!("m_block'\t");
+    // for i in 0..15 {
+    //     if i % 4 == 0 && i != 0 {
+    //         print!("\n_cond_nodes\t");
+    //     }
+    //     print!("{:x}, ", m_block[i]);
+    // }
+    // print!("{:x}\n_cond_nodes\n_cond_nodes", m_block[15]);
 
     return (
         [
@@ -1259,117 +1207,115 @@ fn block1() -> ([u32; 4], [u32; 32], [u32; 32]) {
             re[RELATIVE_INDEX + 70].val,
             re[RELATIVE_INDEX + 69].val,
         ],
-        Mbefore,
-        M,
+        m_block_before,
+        m_block,
     );
 }
 
-fn satisfy_stationary(Q: &mut [u32; 68], type1: i32, cond: [[u32; 3]; 309]) {
+fn satisfy_stationary(q_cond_nodes: &mut [u32; 68], type1: i32, cond: [[u32; 3]; 309]) {
     let mut bit;
     let mut type_2;
-    let mut j = 0;
-    let mut k;
-    let mut m;
+    let k;
+    let m_block;
 
-    //satisfy Q[7-10] for multimessage
-    if (type1 == 0) {
-        m = 145;
+    //satisfy q_cond_nodes[7-10] for multimessage
+    if type1 == 0 {
+        m_block = 145;
         k = 211;
     }
-    //satisfy Q[0,1]
-    else if (type1 == 2) {
-        m = 0;
+    //satisfy q_cond_nodes[0,1]
+    else if type1 == 2 {
+        m_block = 0;
         k = 52;
     }
-    //satisfy Q[0-15]
+    //satisfy q_cond_nodes[0-15]
     else {
-        m = 0;
+        m_block = 0;
         k = 274;
     }
-    //reads through conditions modifying Q[0-15] to satisfy their conditions
-    for mut i in m..k {
-        j = cond[i][0] + 4;
-        let mut zeroBit: u32 = 0xffffffff;
-        let mut oneBit: u32 = 0;
-        while (cond[i][0] == j - 4) {
+    //reads through conditions modifying q_cond_nodes[0-15] to satisfy their conditions
+    for mut i in m_block..k {
+        let j = cond[i][0] + 4;
+        let mut zero_bit: u32 = 0xffffffff;
+        let mut one_bit: u32 = 0;
+        while cond[i][0] == j - 4 {
             bit = cond[i][1];
             type_2 = cond[i][2];
             //designated bit should be set to zero
-            if (type_2 == 0) {
-                zeroBit = zeroBit & !(1 << (bit - 1));
+            if type_2 == 0 {
+                zero_bit = zero_bit & !(1 << (bit - 1));
             }
             //designated bit should be set to one
-            else if (type_2 == 1) {
-                oneBit = oneBit | (1 << (bit - 1));
+            else if type_2 == 1 {
+                one_bit = one_bit | (1 << (bit - 1));
             }
             /*designated bit should be set eQual to the
             same bit of the previous chaining value*/
-            else if (type_2 == 2) {
-                if ((Q[j as usize - 1] & (1 << (bit - 1))) != 0) {
-                    oneBit = oneBit | (1 << (bit - 1));
+            else if type_2 == 2 {
+                if (q_cond_nodes[j as usize - 1] & (1 << (bit - 1))) != 0 {
+                    one_bit = one_bit | (1 << (bit - 1));
                 } else {
-                    zeroBit = zeroBit & !(1 << (bit - 1));
+                    zero_bit = zero_bit & !(1 << (bit - 1));
                 }
             }
             /*designated bit in chaining value x should
             be set eQual to the same bit of chaining value x-2*/
-            else if (type_2 == 3) {
-                if ((Q[j as usize - 2] & (1 << (bit - 1))) != 0) {
-                    oneBit = oneBit | (1 << (bit - 1));
+            else if type_2 == 3 {
+                if (q_cond_nodes[j as usize - 2] & (1 << (bit - 1))) != 0 {
+                    one_bit = one_bit | (1 << (bit - 1));
                 } else {
-                    zeroBit = zeroBit & !(1 << (bit - 1));
+                    zero_bit = zero_bit & !(1 << (bit - 1));
                 }
             }
             /*designated bit should be set to the negation
             of the same bit of the previous chaining value*/
-            else if (type_2 == 4) {
-                //printf("here");
-                if ((Q[j as usize - 1] & (1 << (bit - 1))) == 0) {
-                    oneBit = oneBit | (1 << (bit - 1));
+            else if type_2 == 4 {
+                if (q_cond_nodes[j as usize - 1] & (1 << (bit - 1))) == 0 {
+                    one_bit = one_bit | (1 << (bit - 1));
                 } else {
-                    zeroBit = zeroBit & !(1 << (bit - 1));
+                    zero_bit = zero_bit & !(1 << (bit - 1));
                 }
             }
             i += 1;
         }
-        i -= 1;
-        //modify Q[j] to satisfy conditions
-        Q[j as usize] = Q[j as usize] | oneBit;
-        Q[j as usize] = Q[j as usize] & zeroBit;
+        // i -= 1; // TODO: verify this really can be done
+        //modify q_cond_nodes[j] to satisfy conditions
+        q_cond_nodes[j as usize] = q_cond_nodes[j as usize] | one_bit;
+        q_cond_nodes[j as usize] = q_cond_nodes[j as usize] & zero_bit;
     }
 }
 
 #[inline]
-fn RR(var: u32, num: i32) -> u32 {
+fn md5_rr(var: u32, num: i32) -> u32 {
     let temp: u32 = var >> num;
     return (var << (32 - num)) | temp;
 }
 #[inline]
-fn RL(var: u32, num: i32) -> u32 {
+fn md5_rl(var: u32, num: i32) -> u32 {
     let temp: u32 = var << num;
     return (var >> (32 - num)) | temp;
 }
 
-fn findx(Q: &mut [u32; 68], M: &mut [u32; 16], Mprime: &mut [u32; 16]) {
+fn findx(q_cond_nodes: &mut [u32; 68], m_block: &mut [u32; 16], m_prime_block: &mut [u32; 16]) {
     for i in 4..20 {
-        M[i - 4] = RR((Q[i].overflowing_sub(Q[i - 1]).0), SMAP[i - 4])
+        m_block[i - 4] = md5_rr(q_cond_nodes[i].overflowing_sub(q_cond_nodes[i - 1]).0, SMAP[i - 4])
             .overflowing_sub(TMAP[i - 4])
             .0
-            .overflowing_sub(Q[i - 4])
+            .overflowing_sub(q_cond_nodes[i - 4])
             .0
-            .overflowing_sub(phi(Q, i))
+            .overflowing_sub(phi(q_cond_nodes, i))
             .0;
-        Mprime[i - 4] = M[i - 4];
+        m_prime_block[i - 4] = m_block[i - 4];
     }
-    Mprime[4] = Mprime[4].overflowing_sub(0x80000000).0;
-    Mprime[11] = Mprime[11].overflowing_sub(0x8000).0;
-    Mprime[14] = Mprime[14].overflowing_sub(0x80000000).0;
+    m_prime_block[4] = m_prime_block[4].overflowing_sub(0x80000000).0;
+    m_prime_block[11] = m_prime_block[11].overflowing_sub(0x8000).0;
+    m_prime_block[14] = m_prime_block[14].overflowing_sub(0x80000000).0;
 }
 
 fn md5step20(
-    M: &mut [u32; 16],
+    m_block: &mut [u32; 16],
     vals: &mut [u32; 68],
-    Mprime: &mut [u32; 16],
+    m_prime_block: &mut [u32; 16],
     vals1: &mut [u32; 68],
 ) {
     let mut a = vals[0];
@@ -1382,13 +1328,13 @@ fn md5step20(
         t = a
             .overflowing_add(
                 ((b & c) | ((!b) & d))
-                    .overflowing_add(M[MMAP[j] as usize])
+                    .overflowing_add(m_block[MMAP[j] as usize])
                     .0
                     .overflowing_add(TMAP[j])
                     .0,
             )
             .0;
-        let mut temp = d;
+        let temp = d;
         d = c;
         c = b;
         a = temp;
@@ -1400,11 +1346,11 @@ fn md5step20(
         t = a
             .overflowing_add((b & d) | (c & !d))
             .0
-            .overflowing_add(M[MMAP[j] as usize])
+            .overflowing_add(m_block[MMAP[j] as usize])
             .0
             .overflowing_add(TMAP[j])
             .0;
-        let mut temp = d;
+        let temp = d;
         d = c;
         c = b;
         a = temp;
@@ -1422,11 +1368,11 @@ fn md5step20(
         t = a
             .overflowing_add((b & c) | ((!b) & d))
             .0
-            .overflowing_add(Mprime[MMAP[j] as usize])
+            .overflowing_add(m_prime_block[MMAP[j] as usize])
             .0
             .overflowing_add(TMAP[j])
             .0;
-        let mut temp = d;
+        let temp = d;
         d = c;
         c = b;
         a = temp;
@@ -1438,11 +1384,11 @@ fn md5step20(
         t = a
             .overflowing_add((b & d) | (c & !d))
             .0
-            .overflowing_add(Mprime[MMAP[j] as usize])
+            .overflowing_add(m_prime_block[MMAP[j] as usize])
             .0
             .overflowing_add(TMAP[j])
             .0;
-        let mut temp = d;
+        let temp = d;
         d = c;
         c = b;
         a = temp;
@@ -1452,101 +1398,88 @@ fn md5step20(
     }
 }
 
-fn check_stationary(Q: [u32; 68], m: i32, k: i32, cond: [[u32; 3]; 309]) -> bool {
+fn check_stationary(q_cond_nodes: [u32; 68], m_block: i32, k: i32, cond: [[u32; 3]; 309]) -> bool {
     let mut bit;
     let mut type_2;
-    let mut j: u32 = 0;
-    for mut i in m..k {
-        j = cond[i as usize][0] + 4;
-        let mut zeroBit: u32 = 0xffffffff;
-        let mut oneBit: u32 = 0;
-        while (cond[i as usize][0] == j - 4) {
+    for mut i in m_block..k {
+        let j = cond[i as usize][0] + 4;
+        let mut zero_bit: u32 = 0xffffffff;
+        let mut one_bit: u32 = 0;
+        while cond[i as usize][0] == j - 4 {
             bit = cond[i as usize][1];
             type_2 = cond[i as usize][2];
-            if (type_2 == 0) {
-                zeroBit = zeroBit & !(1 << (bit - 1));
-            } else if (type_2 == 1) {
-                oneBit = oneBit | (1 << (bit - 1));
-            } else if (type_2 == 2) {
-                if ((Q[j as usize - 1] & (1 << (bit - 1))) != 0) {
-                    oneBit = oneBit | (1 << (bit - 1));
+            if type_2 == 0 {
+                zero_bit = zero_bit & !(1 << (bit - 1));
+            } else if type_2 == 1 {
+                one_bit = one_bit | (1 << (bit - 1));
+            } else if type_2 == 2 {
+                if (q_cond_nodes[j as usize - 1] & (1 << (bit - 1))) != 0 {
+                    one_bit = one_bit | (1 << (bit - 1));
                 } else {
-                    zeroBit = zeroBit & !(1 << (bit - 1));
+                    zero_bit = zero_bit & !(1 << (bit - 1));
                 }
-            } else if (type_2 == 3) {
-                if ((Q[j as usize - 2] & (1 << (bit - 1))) != 0) {
-                    oneBit = oneBit | (1 << (bit - 1));
+            } else if type_2 == 3 {
+                if (q_cond_nodes[j as usize - 2] & (1 << (bit - 1))) != 0 {
+                    one_bit = one_bit | (1 << (bit - 1));
                 } else {
-                    zeroBit = zeroBit & !(1 << (bit - 1));
+                    zero_bit = zero_bit & !(1 << (bit - 1));
                 }
-            } else if (type_2 == 4) {
-                if ((Q[j as usize - 1] & (1 << (bit - 1))) == 0) {
-                    oneBit = oneBit | (1 << (bit - 1));
+            } else if type_2 == 4 {
+                if (q_cond_nodes[j as usize - 1] & (1 << (bit - 1))) == 0 {
+                    one_bit = one_bit | (1 << (bit - 1));
                 } else {
-                    zeroBit = zeroBit & !(1 << (bit - 1));
+                    zero_bit = zero_bit & !(1 << (bit - 1));
                 }
             }
             i += 1;
         }
-        i -= 1;
-        if (Q[j as usize] != (Q[j as usize] | oneBit)) {
-            //printf("%d %x 1\n", j, Q[j]);
+        // i -= 1;
+        if q_cond_nodes[j as usize] != (q_cond_nodes[j as usize] | one_bit) {
             return false;
         }
-        if (Q[j as usize] != (Q[j as usize] & zeroBit)) {
-            //printf("%d %x 2\n", j, Q[j]);
+        if q_cond_nodes[j as usize] != (q_cond_nodes[j as usize] & zero_bit) {
             return false;
         }
     }
     return true;
 }
 
-fn block2(CV: [u32; 4]) -> ([u32; 16], [u32; 16]) {
+fn block2(chaining_value: [u32; 4]) -> ([u32; 16], [u32; 16]) {
     let mut rng = rand::thread_rng();
 
-    let mut Q: [u32; 68] = [0; 68];
-    let mut Qprime: [u32; 68] = [0; 68];
+    let mut q_cond_nodes: [u32; 68] = [0; 68];
+    let mut q_prime: [u32; 68] = [0; 68];
 
-    Q[0] = CV[0];
-    Q[1] = CV[3];
-    Q[2] = CV[2];
-    Q[3] = CV[1];
+    q_cond_nodes[0] = chaining_value[0];
+    q_cond_nodes[1] = chaining_value[3];
+    q_cond_nodes[2] = chaining_value[2];
+    q_cond_nodes[3] = chaining_value[1];
 
-    Qprime[0] = Q[0] ^ (0x80000000);
-    Qprime[1] = Q[1] ^ (0x82000000);
-    Qprime[2] = Q[2] ^ (0x86000000);
-    Qprime[3] = Q[3] ^ (0x82000000);
-
-    // println!("Qprime: {:?}", Qprime);
+    q_prime[0] = q_cond_nodes[0] ^ (0x80000000);
+    q_prime[1] = q_cond_nodes[1] ^ (0x82000000);
+    q_prime[2] = q_cond_nodes[2] ^ (0x86000000);
+    q_prime[3] = q_cond_nodes[3] ^ (0x82000000);
 
     let cond: [[u32; 3]; 309] = build_condition_list_block_2("./data/md5cond_2.txt".to_string());
-    // satisfy_stationary(&mut Q,1, cond);
-    // let mut M: [u32; 16] = [0; 16];
-    // let mut Mprime: [u32; 16] = [0; 16];
-    // findx(&mut Q, &mut M, &mut Mprime);
-    // md5step20(&mut M, &mut Q, &mut Mprime, &mut Qprime);
-    // println!("M: {:?}", Q);
-    // println!("M': {:?}", Qprime);
 
-    let mut messageFound = false;
-    while !messageFound {
-        let mut b = true;
+    let mut msg_found = false;
+    while !msg_found {
         let mut c = true;
 
-        let mut M: [u32; 16] = [0; 16];
-        let mut Mprime: [u32; 16] = [0; 16];
+        let mut m_block: [u32; 16] = [0; 16];
+        let mut m_prime_block: [u32; 16] = [0; 16];
         while c {
-            b = true;
+            let mut b = true;
             while b {
                 for i in 4..20 {
-                    Q[i] = rng.gen();
+                    q_cond_nodes[i] = rng.gen();
                 }
-                satisfy_stationary(&mut Q, 1, cond);
-                findx(&mut Q, &mut M, &mut Mprime);
-                if ((M[4] | M[14]) & 0x80000000) != 0 && (M[11] & 0x8000) != 0 {
-                    md5step20(&mut M, &mut Q, &mut Mprime, &mut Qprime);
-                    if (Q[19] ^ Qprime[19]) == 0xa0000000 {
-                        if check_stationary(Q, 0, 274, cond) {
+                satisfy_stationary(&mut q_cond_nodes, 1, cond);
+                findx(&mut q_cond_nodes, &mut m_block, &mut m_prime_block);
+                if ((m_block[4] | m_block[14]) & 0x80000000) != 0 && (m_block[11] & 0x8000) != 0 {
+                    md5step20(&mut m_block, &mut q_cond_nodes, &mut m_prime_block, &mut q_prime);
+                    if (q_cond_nodes[19] ^ q_prime[19]) == 0xa0000000 {
+                        if check_stationary(q_cond_nodes, 0, 274, cond) {
                             b = false;
                         }
                     }
@@ -1558,18 +1491,18 @@ fn block2(CV: [u32; 4]) -> ([u32; 16], [u32; 16]) {
             while b {
                 number += 1;
 
-                Q[5] = rng.gen();
-                Q[4] = rng.gen();
-                satisfy_stationary(&mut Q, 2, cond);
-                findx(&mut Q, &mut M, &mut Mprime);
-                md5step20(&mut M, &mut Q, &mut Mprime, &mut Qprime);
+                q_cond_nodes[5] = rng.gen();
+                q_cond_nodes[4] = rng.gen();
+                satisfy_stationary(&mut q_cond_nodes, 2, cond);
+                findx(&mut q_cond_nodes, &mut m_block, &mut m_prime_block);
+                md5step20(&mut m_block, &mut q_cond_nodes, &mut m_prime_block, &mut q_prime);
                 if number == 0x10000 {
                     b = false;
                 }
 
-                if ((Q[19] ^ Qprime[19]) == 0xa0000000)
-                    && ((Q[24] ^ Qprime[24]) == 0x80000000)
-                    && check_stationary(Q, 0, 286, cond)
+                if ((q_cond_nodes[19] ^ q_prime[19]) == 0xa0000000)
+                    && ((q_cond_nodes[24] ^ q_prime[24]) == 0x80000000)
+                    && check_stationary(q_cond_nodes, 0, 286, cond)
                 {
                     c = false;
                     b = false;
@@ -1577,43 +1510,42 @@ fn block2(CV: [u32; 4]) -> ([u32; 16], [u32; 16]) {
             }
         }
 
-        messageFound = multiMessage2(&mut M, &mut Mprime, &mut Q, &mut Qprime);
-        if messageFound {
+        msg_found = multi_msg_2(&mut m_block, &mut m_prime_block, &mut q_cond_nodes, &mut q_prime);
+        if msg_found {
             println!(
                 "Block2ChainingValue: {:x}{:x}{:x}{:x}",
-                Q[64] + Q[0],
-                Q[67] + Q[3],
-                Q[66] + Q[2],
-                Q[65] + Q[1]
+                q_cond_nodes[64] + q_cond_nodes[0],
+                q_cond_nodes[67] + q_cond_nodes[3],
+                q_cond_nodes[66] + q_cond_nodes[2],
+                q_cond_nodes[65] + q_cond_nodes[1]
             );
-            print!("M\t");
+            print!("m_block\t");
             for i in 0..15 {
                 if i % 4 == 0 && i != 0 {
-                    print!("\n\t");
+                    print!("\n_cond_nodes\t");
                 }
-                print!("{:x}, ", M[i]);
+                print!("{:x}, ", m_block[i]);
             }
-            print!("{:x}\n\n", M[15]);
-            print!("M'\t");
+            print!("{:x}\n_cond_nodes\n_cond_nodes", m_block[15]);
+            print!("m_block'\t");
             for i in 0..15 {
                 if i % 4 == 0 && i != 0 {
-                    print!("\n\t");
+                    print!("\n_cond_nodes\t");
                 }
-                print!("{:x}, ", Mprime[i]);
+                print!("{:x}, ", m_prime_block[i]);
             }
-            print!("{:x}\n\n", Mprime[15]);
+            print!("{:x}\n_cond_nodes\n_cond_nodes", m_prime_block[15]);
 
-            return (M, Mprime);
+            return (m_block, m_prime_block);
         }
     }
     panic!("Block 2 failed");
-    // return ([0; 16], [0; 16]);
 }
 
 fn md5step(
-    M: &mut [u32; 16],
+    m_block: &mut [u32; 16],
     out: &mut [u32; 68],
-    Mprime: &mut [u32; 16],
+    m_prime_block: &mut [u32; 16],
     out1: &mut [u32; 68],
     j: usize,
 ) {
@@ -1622,7 +1554,7 @@ fn md5step(
     t = out[j]
         .overflowing_add(cover_func(out[j + 3], out[j + 2], out[j + 1], j))
         .0
-        .overflowing_add(M[MMAP[j] as usize])
+        .overflowing_add(m_block[MMAP[j] as usize])
         .0
         .overflowing_add(TMAP[j])
         .0;
@@ -1634,7 +1566,7 @@ fn md5step(
     t = out1[j]
         .overflowing_add(cover_func(out1[j + 3], out1[j + 2], out1[j + 1], j))
         .0
-        .overflowing_add(Mprime[MMAP[j] as usize])
+        .overflowing_add(m_prime_block[MMAP[j] as usize])
         .0
         .overflowing_add(TMAP[j])
         .0;
@@ -1645,227 +1577,226 @@ fn md5step(
     out1[j + 4] = t1;
 }
 
-fn multiMessage2(
-    M: &mut [u32; 16],
-    Mprime: &mut [u32; 16],
-    Q: &mut [u32; 68],
-    Qprime: &mut [u32; 68],
+fn multi_msg_2(
+    m_block: &mut [u32; 16],
+    m_prime_block: &mut [u32; 16],
+    q_cond_nodes: &mut [u32; 68],
+    q_prime: &mut [u32; 68],
 ) -> bool {
     let mut rng = rand::thread_rng();
-    for i in 1..0x1000 {
-        Qprime[19] = 0;
-        while ((Q[24] ^ Qprime[24]) != 0x80000000) || ((Q[19] ^ Qprime[19]) != 0xa0000000) {
-            //randomly select Q[7-10] and satisfy conditons
-            Q[11] = ((rng.gen::<u32>()) & 0xe47efffe) | 0x843283c0;
-            //sets Q[7]_2 = Q[6]_2
-            if ((Q[10] & 0x2) == 0) {
-                Q[11] = Q[11] & 0xfffffffd;
+    for _ in 1..0x1000 {
+        q_prime[19] = 0;
+        while ((q_cond_nodes[24] ^ q_prime[24]) != 0x80000000) || ((q_cond_nodes[19] ^ q_prime[19]) != 0xa0000000) {
+            //randomly select q_cond_nodes[7-10] and satisfy conditons
+            q_cond_nodes[11] = ((rng.gen::<u32>()) & 0xe47efffe) | 0x843283c0;
+            //sets q_cond_nodes[7]_2 = q_cond_nodes[6]_2
+            if (q_cond_nodes[10] & 0x2) == 0 {
+                q_cond_nodes[11] = q_cond_nodes[11] & 0xfffffffd;
             } else {
-                Q[11] = Q[11] | 0x2;
+                q_cond_nodes[11] = q_cond_nodes[11] | 0x2;
             }
-            Q[12] = ((rng.gen::<u32>()) & 0xfc7d7dfd) | 0x9c0101c1;
-            if ((Q[11] & 0x1000) == 0) {
-                Q[12] = Q[12] & 0xffffefff;
+            q_cond_nodes[12] = ((rng.gen::<u32>()) & 0xfc7d7dfd) | 0x9c0101c1;
+            if (q_cond_nodes[11] & 0x1000) == 0 {
+                q_cond_nodes[12] = q_cond_nodes[12] & 0xffffefff;
             } else {
-                Q[12] = Q[12] | 0x1000;
+                q_cond_nodes[12] = q_cond_nodes[12] | 0x1000;
             }
-            Q[13] = ((rng.gen::<u32>()) & 0xfffbeffc) | 0x878383c0;
-            Q[14] = ((rng.gen::<u32>()) & 0xfffdefff) | 0x800583c3;
-            if ((Q[13] & 0x80000) == 0) {
-                Q[14] = Q[14] & 0xfff7ffff;
+            q_cond_nodes[13] = ((rng.gen::<u32>()) & 0xfffbeffc) | 0x878383c0;
+            q_cond_nodes[14] = ((rng.gen::<u32>()) & 0xfffdefff) | 0x800583c3;
+            if (q_cond_nodes[13] & 0x80000) == 0 {
+                q_cond_nodes[14] = q_cond_nodes[14] & 0xfff7ffff;
             } else {
-                Q[14] = Q[14] | 0x80000;
+                q_cond_nodes[14] = q_cond_nodes[14] | 0x80000;
             }
-            if ((Q[13] & 0x4000) == 0) {
-                Q[14] = Q[14] & 0xffffbfff;
+            if (q_cond_nodes[13] & 0x4000) == 0 {
+                q_cond_nodes[14] = q_cond_nodes[14] & 0xffffbfff;
             } else {
-                Q[14] = Q[14] | 0x4000;
+                q_cond_nodes[14] = q_cond_nodes[14] | 0x4000;
             }
-            if ((Q[13] & 0x2000) == 0) {
-                Q[14] = Q[14] & 0xffffdfff;
+            if (q_cond_nodes[13] & 0x2000) == 0 {
+                q_cond_nodes[14] = q_cond_nodes[14] & 0xffffdfff;
             } else {
-                Q[14] = Q[14] | 0x2000;
+                q_cond_nodes[14] = q_cond_nodes[14] | 0x2000;
             }
-            if ((Q[10] & 0x80000000) == 0) {
-                Q[11] = Q[11] & 0x7fffffff;
-                Q[12] = Q[12] & 0x7fffffff;
-                Q[13] = Q[13] & 0x7fffffff;
-                Q[14] = Q[14] & 0x7fffffff;
+            if (q_cond_nodes[10] & 0x80000000) == 0 {
+                q_cond_nodes[11] = q_cond_nodes[11] & 0x7fffffff;
+                q_cond_nodes[12] = q_cond_nodes[12] & 0x7fffffff;
+                q_cond_nodes[13] = q_cond_nodes[13] & 0x7fffffff;
+                q_cond_nodes[14] = q_cond_nodes[14] & 0x7fffffff;
             }
 
-            //calculate Q[11]
-            Q[15] = Q[14]
-                .overflowing_add(RL(
-                    phi(Q, 15)
+            //calculate q_cond_nodes[11]
+            q_cond_nodes[15] = q_cond_nodes[14]
+                .overflowing_add(md5_rl(
+                    phi(q_cond_nodes, 15)
                         .overflowing_add(0x895cd7be)
                         .0
-                        .overflowing_add(M[11])
+                        .overflowing_add(m_block[11])
                         .0
-                        .overflowing_add(Q[11])
+                        .overflowing_add(q_cond_nodes[11])
                         .0,
                     22,
                 ))
                 .0;
 
-            if (Q[15] & 0xfff81fff) == Q[15]
-                && (Q[15] | 0x00081080) == Q[15]
-                && ((Q[14] ^ Q[15]) & 0xff000000) == 0
+            if (q_cond_nodes[15] & 0xfff81fff) == q_cond_nodes[15]
+                && (q_cond_nodes[15] | 0x00081080) == q_cond_nodes[15]
+                && ((q_cond_nodes[14] ^ q_cond_nodes[15]) & 0xff000000) == 0
             {
                 for i in 7..16 {
-                    M[i] = RR(Q[i + 4].overflowing_sub(Q[i + 3]).0, SMAP[i])
+                    m_block[i] = md5_rr(q_cond_nodes[i + 4].overflowing_sub(q_cond_nodes[i + 3]).0, SMAP[i])
                         .overflowing_sub(TMAP[i])
                         .0
-                        .overflowing_sub(Q[i])
+                        .overflowing_sub(q_cond_nodes[i])
                         .0
-                        .overflowing_sub(phi(Q, i + 4))
+                        .overflowing_sub(phi(q_cond_nodes, i + 4))
                         .0;
                 }
                 for v in 7..16 {
-                    Mprime[v] = M[v];
+                    m_prime_block[v] = m_block[v];
                 }
-                Mprime[11] = Mprime[11].overflowing_sub(0x8000).0;
-                Mprime[14] = Mprime[14].overflowing_sub(0x80000000).0;
-                md5step20(M, Q, Mprime, Qprime);
+                m_prime_block[11] = m_prime_block[11].overflowing_sub(0x8000).0;
+                m_prime_block[14] = m_prime_block[14].overflowing_sub(0x80000000).0;
+                md5step20(m_block, q_cond_nodes, m_prime_block, q_prime);
             }
         }
 
-        let mut truth = true;
-        let mut x11 = Q[15];
-        for mut j in 0..0x20000 {
-            truth = true;
+        // let x11 = q_cond_nodes[15];
+        for j in 0..0x20000 {
+            let mut truth = true;
             //flip bits using gray code
-            if ((j & 0x1) != 0) {
-                if ((Q[14] & 0x4) == 0) {
-                    Q[13] = Q[13] ^ 0x4;
+            if (j & 0x1) != 0 {
+                if (q_cond_nodes[14] & 0x4) == 0 {
+                    q_cond_nodes[13] = q_cond_nodes[13] ^ 0x4;
                 } else {
-                    Q[12] = Q[12] ^ 0x4;
+                    q_cond_nodes[12] = q_cond_nodes[12] ^ 0x4;
                 }
-            } else if ((j & 0x2) != 0) {
-                if ((Q[14] & 0x8) == 0) {
-                    Q[13] = Q[13] ^ 0x8;
+            } else if (j & 0x2) != 0 {
+                if (q_cond_nodes[14] & 0x8) == 0 {
+                    q_cond_nodes[13] = q_cond_nodes[13] ^ 0x8;
                 } else {
-                    Q[12] = Q[12] ^ 0x8;
+                    q_cond_nodes[12] = q_cond_nodes[12] ^ 0x8;
                 }
-            } else if ((j & 0x4) != 0) {
-                if ((Q[14] & 0x10) == 0) {
-                    Q[13] = Q[13] ^ 0x10;
+            } else if (j & 0x4) != 0 {
+                if (q_cond_nodes[14] & 0x10) == 0 {
+                    q_cond_nodes[13] = q_cond_nodes[13] ^ 0x10;
                 } else {
-                    Q[12] = Q[12] ^ 0x10;
+                    q_cond_nodes[12] = q_cond_nodes[12] ^ 0x10;
                 }
-            } else if ((j & 0x8) != 0) {
-                if ((Q[14] & 0x20) == 0) {
-                    Q[13] = Q[13] ^ 0x20;
+            } else if (j & 0x8) != 0 {
+                if (q_cond_nodes[14] & 0x20) == 0 {
+                    q_cond_nodes[13] = q_cond_nodes[13] ^ 0x20;
                 } else {
-                    Q[12] = Q[12] ^ 0x20;
+                    q_cond_nodes[12] = q_cond_nodes[12] ^ 0x20;
                 }
-            } else if ((j & 0x10) != 0) {
-                if ((Q[14] & 0x400) == 0) {
-                    Q[13] = Q[13] ^ 0x400;
+            } else if (j & 0x10) != 0 {
+                if (q_cond_nodes[14] & 0x400) == 0 {
+                    q_cond_nodes[13] = q_cond_nodes[13] ^ 0x400;
                 } else {
-                    Q[12] = Q[12] ^ 0x400;
+                    q_cond_nodes[12] = q_cond_nodes[12] ^ 0x400;
                 }
-            } else if ((j & 0x20) != 0) {
-                if ((Q[14] & 0x800) == 0) {
-                    Q[13] = Q[13] ^ 0x800;
+            } else if (j & 0x20) != 0 {
+                if (q_cond_nodes[14] & 0x800) == 0 {
+                    q_cond_nodes[13] = q_cond_nodes[13] ^ 0x800;
                 } else {
-                    Q[12] = Q[12] ^ 0x800;
+                    q_cond_nodes[12] = q_cond_nodes[12] ^ 0x800;
                 }
-            } else if ((j & 0x40) != 0) {
-                if ((Q[14] & 0x100000) == 0) {
-                    Q[13] = Q[13] ^ 0x100000;
+            } else if (j & 0x40) != 0 {
+                if (q_cond_nodes[14] & 0x100000) == 0 {
+                    q_cond_nodes[13] = q_cond_nodes[13] ^ 0x100000;
                 } else {
-                    Q[12] = Q[12] ^ 0x100000;
+                    q_cond_nodes[12] = q_cond_nodes[12] ^ 0x100000;
                 }
-            } else if ((j & 0x80) != 0) {
-                if ((Q[14] & 0x200000) == 0) {
-                    Q[13] = Q[13] ^ 0x200000;
+            } else if (j & 0x80) != 0 {
+                if (q_cond_nodes[14] & 0x200000) == 0 {
+                    q_cond_nodes[13] = q_cond_nodes[13] ^ 0x200000;
                 } else {
-                    Q[12] = Q[12] ^ 0x200000;
+                    q_cond_nodes[12] = q_cond_nodes[12] ^ 0x200000;
                 }
-            } else if ((j & 0x100) != 0) {
-                if ((Q[14] & 0x400000) == 0) {
-                    Q[13] = Q[13] ^ 0x400000;
+            } else if (j & 0x100) != 0 {
+                if (q_cond_nodes[14] & 0x400000) == 0 {
+                    q_cond_nodes[13] = q_cond_nodes[13] ^ 0x400000;
                 } else {
-                    Q[12] = Q[12] ^ 0x400000;
+                    q_cond_nodes[12] = q_cond_nodes[12] ^ 0x400000;
                 }
-            } else if ((j & 0x200) != 0) {
-                if ((Q[14] & 0x20000000) == 0) {
-                    Q[13] = Q[13] ^ 0x20000000;
+            } else if (j & 0x200) != 0 {
+                if (q_cond_nodes[14] & 0x20000000) == 0 {
+                    q_cond_nodes[13] = q_cond_nodes[13] ^ 0x20000000;
                 } else {
-                    Q[12] = Q[12] ^ 0x20000000;
+                    q_cond_nodes[12] = q_cond_nodes[12] ^ 0x20000000;
                 }
-            } else if ((j & 0x400) != 0) {
-                if ((Q[14] & 0x40000000) == 0) {
-                    Q[13] = Q[13] ^ 0x40000000;
+            } else if (j & 0x400) != 0 {
+                if (q_cond_nodes[14] & 0x40000000) == 0 {
+                    q_cond_nodes[13] = q_cond_nodes[13] ^ 0x40000000;
                 } else {
-                    Q[12] = Q[12] ^ 0x40000000;
+                    q_cond_nodes[12] = q_cond_nodes[12] ^ 0x40000000;
                 }
-            } else if ((j & 0x800) != 0) {
-                if ((Q[14] & 0x4000) == 0) {
-                    j = j + 0x7ff;
+            } else if (j & 0x800) != 0 {
+                if (q_cond_nodes[14] & 0x4000) == 0 {
+                    // j = j + 0x7ff;
                 } else {
-                    Q[12] = Q[12] ^ 0x4000;
+                    q_cond_nodes[12] = q_cond_nodes[12] ^ 0x4000;
                 }
-            } else if ((j & 0x1000) != 0) {
-                if ((Q[14] & 0x80000) == 0) {
-                    j = j + 0xfff;
+            } else if (j & 0x1000) != 0 {
+                if (q_cond_nodes[14] & 0x80000) == 0 {
+                    // j = j + 0xfff;
                 } else {
-                    Q[12] = Q[12] ^ 0x80000;
+                    q_cond_nodes[12] = q_cond_nodes[12] ^ 0x80000;
                 }
-            } else if ((j & 0x2000) != 0) {
-                if ((Q[14] & 0x40000) == 0) {
-                    j = j + 0x1fff;
+            } else if (j & 0x2000) != 0 {
+                if (q_cond_nodes[14] & 0x40000) == 0 {
+                    // j = j + 0x1fff;
                 } else {
-                    Q[12] = Q[12] ^ 0x40000;
+                    q_cond_nodes[12] = q_cond_nodes[12] ^ 0x40000;
                 }
-            } else if ((j & 0x4000) != 0) {
-                if ((Q[14] & 0x8000000) != 0) {
-                    j = j + 0x3fff;
+            } else if (j & 0x4000) != 0 {
+                if (q_cond_nodes[14] & 0x8000000) != 0 {
+                    // j = j + 0x3fff;
                 } else {
-                    Q[13] = Q[13] ^ 0x8000000;
+                    q_cond_nodes[13] = q_cond_nodes[13] ^ 0x8000000;
                 }
-            } else if ((j & 0x8000) != 0) {
-                if ((Q[14] & 0x10000000) != 0) {
-                    j = j + 0x7fff;
+            } else if (j & 0x8000) != 0 {
+                if (q_cond_nodes[14] & 0x10000000) != 0 {
+                    // j = j + 0x7fff;
                 } else {
-                    Q[13] = Q[13] ^ 0x10000000;
+                    q_cond_nodes[13] = q_cond_nodes[13] ^ 0x10000000;
                 }
-            } else if ((j & 0x10000) != 0) {
-                if ((Q[14] & 0x2000) == 0) {
-                    j = j + 0xffff;
+            } else if (j & 0x10000) != 0 {
+                if (q_cond_nodes[14] & 0x2000) == 0 {
+                    // j = j + 0xffff;
                 } else {
-                    Q[12] = Q[12] ^ 0x2000;
+                    q_cond_nodes[12] = q_cond_nodes[12] ^ 0x2000;
                 }
             }
 
             for p in 8..14 {
-                M[p] = RR(Q[p + 4].overflowing_sub(Q[p + 3]).0, SMAP[p])
+                m_block[p] = md5_rr(q_cond_nodes[p + 4].overflowing_sub(q_cond_nodes[p + 3]).0, SMAP[p])
                     .overflowing_sub(TMAP[p])
                     .0
-                    .overflowing_sub(Q[p])
+                    .overflowing_sub(q_cond_nodes[p])
                     .0
-                    .overflowing_sub(phi(Q, p + 4))
+                    .overflowing_sub(phi(q_cond_nodes, p + 4))
                     .0;
-                Mprime[p] = M[p];
+                m_prime_block[p] = m_block[p];
             }
-            Mprime[11] = Mprime[11] - 0x8000;
-            md5step20(M, Q, Mprime, Qprime);
+            m_prime_block[11] = m_prime_block[11] - 0x8000;
+            md5step20(m_block, q_cond_nodes, m_prime_block, q_prime);
             for k in 21..64 {
-                md5step(M, Q, Mprime, Qprime, k);
-                if (Q[k + 4] ^ Qprime[k + 4]) != DIFFERENCES[k] {
+                md5step(m_block, q_cond_nodes, m_prime_block, q_prime, k);
+                if (q_cond_nodes[k + 4] ^ q_prime[k + 4]) != DIFFERENCES[k] {
                     truth = false;
                     break;
                 }
             }
             if truth {
-                let val64 = Q[64] + Q[0];
-                let val65 = Q[65] + Q[1];
-                let val66 = Q[66] + Q[2];
-                let val67 = Q[67] + Q[3];
-                let val164 = Qprime[64] + Qprime[0];
-                let val165 = Qprime[65] + Qprime[1];
-                let val166 = Qprime[66] + Qprime[2];
-                let val167 = Qprime[67] + Qprime[3];
+                let val64 = q_cond_nodes[64] + q_cond_nodes[0];
+                let val65 = q_cond_nodes[65] + q_cond_nodes[1];
+                let val66 = q_cond_nodes[66] + q_cond_nodes[2];
+                let val67 = q_cond_nodes[67] + q_cond_nodes[3];
+                let val164 = q_prime[64] + q_prime[0];
+                let val165 = q_prime[65] + q_prime[1];
+                let val166 = q_prime[66] + q_prime[2];
+                let val167 = q_prime[67] + q_prime[3];
 
                 if (val64 ^ val164) == 0
                     && (val65 ^ val165) == 0
@@ -1880,13 +1811,13 @@ fn multiMessage2(
     return false;
 }
 
-fn main(){
+fn main() {
     println!("---==[md5ium]==---");
     let mut cv_and_blocks1: ([u32; 4], [u32; 32], [u32; 32]) = block1();
     let blocks2: ([u32; 16], [u32; 16]) = block2(cv_and_blocks1.0);
     for i in 16..32 {
-        cv_and_blocks1.1[i] = blocks2.0[i-16];
-        cv_and_blocks1.2[i] = blocks2.1[i-16];
+        cv_and_blocks1.1[i] = blocks2.0[i - 16];
+        cv_and_blocks1.2[i] = blocks2.1[i - 16];
     }
     println!();
     println!("Block 1: {:?}", cv_and_blocks1.1);
