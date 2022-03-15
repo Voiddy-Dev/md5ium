@@ -201,7 +201,6 @@ fn smm5(index: i32, n_cond_nodes: &mut Vec<Node>) -> u32 {
     if i4 < 0 {
         i4 += 68;
     }
-    // recompute correct message value for updated value of x
     return crs(
         x.overflowing_sub(n_cond_nodes[RELATIVE_INDEX + i1 as usize].val)
             .0,
@@ -281,7 +280,6 @@ fn build_condition_list(filename: String) -> Vec<Node> {
                 q_index += RELATIVE_INDEX;
                 assert!(q_index < 76);
 
-                // init condition
                 let cond = Condition {
                     ind: split.next().unwrap().parse().unwrap(),
                     cref: split.next().unwrap().parse().unwrap(),
@@ -289,13 +287,11 @@ fn build_condition_list(filename: String) -> Vec<Node> {
                     add_const: split.next().unwrap().parse().unwrap(),
                 };
                 res[q_index].list.push(cond);
-                // Sorting by index
                 res[q_index].list.sort_by(|b, a| b.ind.cmp(&a.ind));
             }
             _ => print!("Error in line."),
         }
     }
-    // returning
     res
 }
 
@@ -312,14 +308,14 @@ fn construct_diff_table() -> [u32; 68] {
     diff_table[6] = addsub_bit(0, 6, -1);
     diff_table[6] = addsub_bit(diff_table[6], 23, 1);
     diff_table[6] -= 1;
-    diff_table[6] = diff_table[6].wrapping_sub(addsub_bit(0, 27, 1));
+    diff_table[6] = diff_table[6].overflowing_sub(addsub_bit(0, 27, 1)).0;
     diff_table[7] += 1;
-    diff_table[7] = diff_table[7].wrapping_sub(addsub_bit(0, 15, 1));
-    diff_table[7] = diff_table[7].wrapping_sub(addsub_bit(0, 17, 1));
-    diff_table[7] = diff_table[7].wrapping_sub(addsub_bit(0, 23, 1));
+    diff_table[7] = diff_table[7].overflowing_sub(addsub_bit(0, 15, 1)).0;
+    diff_table[7] = diff_table[7].overflowing_sub(addsub_bit(0, 17, 1)).0;
+    diff_table[7] = diff_table[7].overflowing_sub(addsub_bit(0, 23, 1)).0;
     diff_table[8] += 1;
-    diff_table[8] = diff_table[8].wrapping_sub(addsub_bit(0, 6, 1));
-    diff_table[8] = diff_table[8].wrapping_add(addsub_bit(0, 31, 1));
+    diff_table[8] = diff_table[8].overflowing_sub(addsub_bit(0, 6, 1)).0;
+    diff_table[8] = diff_table[8].overflowing_add(addsub_bit(0, 31, 1)).0;
     diff_table[9] += addsub_bit(0, 12, 1);
     diff_table[9] += addsub_bit(0, 31, 1);
     diff_table[10] += addsub_bit(0, 31, 1);
@@ -361,9 +357,9 @@ fn construct_diff_table() -> [u32; 68] {
     diff_table[62] += addsub_bit(0, 25, 1);
     diff_table[63] += addsub_bit(0, 31, -1);
     diff_table[63] += addsub_bit(0, 25, 1);
-    diff_table[64] += addsub_bit(0, 31, 1); // these last four values in diff_table
-    diff_table[65] += addsub_bit(0, 31, 1); // contain the needed differentials for the
-    diff_table[65] += addsub_bit(0, 25, 1); // chaining variables
+    diff_table[64] += addsub_bit(0, 31, 1);
+    diff_table[65] += addsub_bit(0, 31, 1);
+    diff_table[65] += addsub_bit(0, 25, 1);
     diff_table[66] += addsub_bit(0, 31, 1);
     diff_table[66] += addsub_bit(0, 25, 1);
     diff_table[67] += addsub_bit(0, 31, -1);
@@ -379,7 +375,6 @@ fn first_round(m_block: &mut [u32; 32], n_cond_nodes: &mut Vec<Node>, diff_table
         flag = 1;
 
         for i in 0..16 {
-            // Do initial computation
             n_cond_nodes[RELATIVE_INDEX + i].val = n_cond_nodes[RELATIVE_INDEX + i - 1]
                 .val
                 .overflowing_add(cls(
