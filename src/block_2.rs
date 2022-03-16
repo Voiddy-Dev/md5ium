@@ -285,7 +285,7 @@ fn check_stationary(q_cond_nodes: [u32; 68], m_block: i32, k: i32, cond: [[u32; 
     return true;
 }
 
-pub fn block2(chaining_value: [u32; 4]) -> ([u32; 16], [u32; 16]) {
+pub fn block2(chaining_value: [u32; 4]) -> ([u32; 4], [u32; 16], [u32; 16]) {
     let mut rng = rand::thread_rng();
 
     let mut q_cond_nodes: [u32; 68] = [0; 68];
@@ -376,7 +376,16 @@ pub fn block2(chaining_value: [u32; 4]) -> ([u32; 16], [u32; 16]) {
                 q_cond_nodes[65] + q_cond_nodes[1]
             );
 
-            return (m_block, m_prime_block);
+            return (
+                [
+                    q_cond_nodes[64] + q_cond_nodes[0],
+                    q_cond_nodes[67] + q_cond_nodes[3],
+                    q_cond_nodes[66] + q_cond_nodes[2],
+                    q_cond_nodes[65] + q_cond_nodes[1],
+                ],
+                m_block,
+                m_prime_block,
+            );
         }
     }
     panic!("Block 2 failed");

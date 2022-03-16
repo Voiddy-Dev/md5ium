@@ -7,7 +7,6 @@ use std::io::{BufRead, BufReader};
 mod md5_values;
 
 const RELATIVE_INDEX: usize = 4;
-const IV: [u32; 4] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476];
 
 #[inline]
 fn cls(x: u32, s: i32) -> u32 {
@@ -82,6 +81,7 @@ struct Node {
 }
 
 impl Default for Node {
+    #[inline]
     fn default() -> Node {
         Node {
             val: 0,
@@ -92,7 +92,7 @@ impl Default for Node {
     }
 }
 
-fn smm5(index: i32, n_cond_nodes: &mut Vec<Node>) -> u32 {
+fn smm5(index: i32, n_cond_nodes: &mut [Node; 76]) -> u32 {
     let mut y: u32;
     let mut b2: i32;
     let mut i1: i32;
@@ -144,7 +144,7 @@ fn smm5(index: i32, n_cond_nodes: &mut Vec<Node>) -> u32 {
     .0;
 }
 
-fn build_bitfield(n_cond_nodes: &mut Vec<Node>) {
+fn build_bitfield(n_cond_nodes: &mut [Node; 76]) {
     let mut count = 0;
     for el in n_cond_nodes {
         if count >= RELATIVE_INDEX {
@@ -241,7 +241,7 @@ fn construct_diff_table() -> [u32; 68] {
     diff_table
 }
 
-fn first_round(m_block: &mut [u32; 32], n_cond_nodes: &mut Vec<Node>, diff_table: [u32; 68]) {
+fn first_round(m_block: &mut [u32; 32], n_cond_nodes: &mut [Node; 76], diff_table: [u32; 68]) {
     let mut flag: i32 = 0;
 
     while flag == 0 {
@@ -331,7 +331,7 @@ fn new_rand_mblock(m_block: &mut [u32; 32]) {
     }
 }
 
-fn fcheck_cond(ind: i32, n_cond_nodes: &mut Vec<Node>) -> u32 {
+fn fcheck_cond(ind: i32, n_cond_nodes: &mut [Node; 76]) -> u32 {
     let mut x: u32 = 0;
     x |= (!n_cond_nodes[RELATIVE_INDEX + ind as usize].val)
         & n_cond_nodes[RELATIVE_INDEX + ind as usize].bf[0];
@@ -360,7 +360,7 @@ fn fcheck_cond(ind: i32, n_cond_nodes: &mut Vec<Node>) -> u32 {
     x
 }
 
-fn klima1_3(m_block: &mut [u32; 32], n_cond_nodes: &mut Vec<Node>) -> bool {
+fn klima1_3(m_block: &mut [u32; 32], n_cond_nodes: &mut [Node; 76]) -> bool {
     let mut rng = rand::thread_rng();
     let mut x: u32;
 
@@ -432,7 +432,7 @@ fn klima1_3(m_block: &mut [u32; 32], n_cond_nodes: &mut Vec<Node>) -> bool {
     false
 }
 
-fn klima4_9(m_block: &mut [u32; 32], n_cond_nodes: &mut Vec<Node>, g_n19: &mut u32) {
+fn klima4_9(m_block: &mut [u32; 32], n_cond_nodes: &mut [Node; 76], g_n19: &mut u32) {
     n_cond_nodes[RELATIVE_INDEX + 19].val = *g_n19;
     *g_n19 += 1;
     fix_n19(g_n19);
@@ -598,26 +598,27 @@ fn klima4_9(m_block: &mut [u32; 32], n_cond_nodes: &mut Vec<Node>, g_n19: &mut u
 }
 
 fn first_block(
+    init_vector: [u32; 4],
     m_block: &mut [u32; 32],
-    n_cond_nodes: &mut Vec<Node>,
+    n_cond_nodes: &mut [Node; 76],
     dt: [u32; 68],
     g_n19: &mut u32,
 ) {
-    n_cond_nodes[RELATIVE_INDEX + 64].val = IV[0];
-    n_cond_nodes[RELATIVE_INDEX - 4].val = IV[0];
-    n_cond_nodes[RELATIVE_INDEX - 4].tval = IV[0];
+    n_cond_nodes[RELATIVE_INDEX + 64].val = init_vector[0];
+    n_cond_nodes[RELATIVE_INDEX - 4].val = init_vector[0];
+    n_cond_nodes[RELATIVE_INDEX - 4].tval = init_vector[0];
 
-    n_cond_nodes[RELATIVE_INDEX + 65].val = IV[3];
-    n_cond_nodes[RELATIVE_INDEX - 3].val = IV[3];
-    n_cond_nodes[RELATIVE_INDEX - 3].tval = IV[3];
+    n_cond_nodes[RELATIVE_INDEX + 65].val = init_vector[3];
+    n_cond_nodes[RELATIVE_INDEX - 3].val = init_vector[3];
+    n_cond_nodes[RELATIVE_INDEX - 3].tval = init_vector[3];
 
-    n_cond_nodes[RELATIVE_INDEX + 66].val = IV[2];
-    n_cond_nodes[RELATIVE_INDEX - 2].val = IV[2];
-    n_cond_nodes[RELATIVE_INDEX - 2].tval = IV[2];
+    n_cond_nodes[RELATIVE_INDEX + 66].val = init_vector[2];
+    n_cond_nodes[RELATIVE_INDEX - 2].val = init_vector[2];
+    n_cond_nodes[RELATIVE_INDEX - 2].tval = init_vector[2];
 
-    n_cond_nodes[RELATIVE_INDEX + 67].val = IV[1];
-    n_cond_nodes[RELATIVE_INDEX - 1].val = IV[1];
-    n_cond_nodes[RELATIVE_INDEX - 1].tval = IV[1];
+    n_cond_nodes[RELATIVE_INDEX + 67].val = init_vector[1];
+    n_cond_nodes[RELATIVE_INDEX - 1].val = init_vector[1];
+    n_cond_nodes[RELATIVE_INDEX - 1].tval = init_vector[1];
 
     first_round(m_block, n_cond_nodes, dt);
 
@@ -643,20 +644,17 @@ fn first_block(
 
 fn check_diffs(
     m_block: &mut [u32; 32],
-    n_cond_nodes: &mut Vec<Node>,
+    n_cond_nodes: &mut [Node; 76],
     index: i32,
     dt: [u32; 68],
 ) -> i32 {
     let mut m_prime_block: [u32; 16] = [0; 16];
     m_prime_block.copy_from_slice(&m_block[..16]);
 
-    for i in 0..16 {
-        assert_eq!(m_block[i], m_prime_block[i]);
-    }
-
     m_prime_block[4] = addsub_bit(m_prime_block[4], 31, 1);
     m_prime_block[11] = addsub_bit(m_prime_block[11], 15, 1);
     m_prime_block[14] = addsub_bit(m_prime_block[14], 31, 1);
+
     let mut local_index: usize = index as usize;
     if local_index == 20 {
         for i in 15..20 {
@@ -943,7 +941,7 @@ fn check_diffs(
     return -1;
 }
 
-pub fn block1() -> ([u32; 4], [u32; 32], [u32; 32]) {
+pub fn block1(init_vector: [u32; 4]) -> ([u32; 4], [u32; 32], [u32; 32]) {
     let mut g_n19: u32 = 0;
 
     // Building condition list and bitfield
@@ -954,9 +952,9 @@ pub fn block1() -> ([u32; 4], [u32; 32], [u32; 32]) {
     let mut m_block: [u32; 32] = [0; 32];
     new_rand_mblock(&mut m_block); // Randomize
 
-    first_block(&mut m_block, &mut re, dt, &mut g_n19);
+    first_block(init_vector, &mut m_block, &mut re, dt, &mut g_n19);
     while check_diffs(&mut m_block, &mut re, 0, dt) > -1 {
-        first_block(&mut m_block, &mut re, dt, &mut g_n19);
+        first_block(init_vector, &mut m_block, &mut re, dt, &mut g_n19);
     }
     println!(
         "Block1ChainingValue: {:x}{:x}{:x}{:x}",
@@ -984,14 +982,88 @@ pub fn block1() -> ([u32; 4], [u32; 32], [u32; 32]) {
     );
 }
 
-fn build_condition_list(filename: String) -> Vec<Node> {
+fn build_condition_list(filename: String) -> [Node; 76] {
     let f = File::open(filename).expect("Errors reading cond file");
     let reader = BufReader::new(f);
-
-    let mut res: Vec<Node> = Vec::new();
-    for _ in 0..76 {
-        res.push(Node::default())
-    }
+    // I am sad I had to do that... but Rust and Copy of Vecs does not work
+    let mut res: [Node; 76] = [
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+        Node::default(),
+    ];
 
     for line in reader.lines() {
         match line {
