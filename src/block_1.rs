@@ -613,67 +613,58 @@ fn first_block(
     }
 }
 
-fn check_diffs(
+fn round1_check_diffs(
     m_block: &mut [u32; 32],
+    m_prime_block: &mut [u32; 16],
     n_cond_nodes: &mut [Node; 76],
-    index: i32,
     dt: [u32; 68],
 ) -> i32 {
-    let mut m_prime_block: [u32; 16] = [0; 16];
-    m_prime_block.copy_from_slice(&m_block[..16]);
+    for i in 0..16 {
+        n_cond_nodes[RELATIVE_INDEX + i].val =
+            n_cond_nodes[RELATIVE_INDEX + i - 1].val.wrapping_add(cls(
+                md5_values::md5_f(
+                    n_cond_nodes[RELATIVE_INDEX + i - 1].val,
+                    n_cond_nodes[RELATIVE_INDEX + i - 2].val,
+                    n_cond_nodes[RELATIVE_INDEX + i - 3].val,
+                )
+                .wrapping_add(n_cond_nodes[RELATIVE_INDEX + i - 4].val)
+                .wrapping_add(m_block[md5_values::MMAP[i] as usize])
+                .wrapping_add(md5_values::TMAP[i]),
+                md5_values::SMAP[i],
+            ));
 
-    m_prime_block[4] = addsub_bit(m_prime_block[4], 31, 1);
-    m_prime_block[11] = addsub_bit(m_prime_block[11], 15, 1);
-    m_prime_block[14] = addsub_bit(m_prime_block[14], 31, 1);
+        n_cond_nodes[RELATIVE_INDEX + i].tval =
+            n_cond_nodes[RELATIVE_INDEX + i - 1].tval.wrapping_add(cls(
+                md5_values::md5_f(
+                    n_cond_nodes[RELATIVE_INDEX + i - 1].tval,
+                    n_cond_nodes[RELATIVE_INDEX + i - 2].tval,
+                    n_cond_nodes[RELATIVE_INDEX + i - 3].tval,
+                )
+                .wrapping_add(n_cond_nodes[RELATIVE_INDEX + i - 4].tval)
+                .wrapping_add(m_prime_block[md5_values::MMAP[i] as usize])
+                .wrapping_add(md5_values::TMAP[i]),
+                md5_values::SMAP[i],
+            ));
 
-    let mut local_index: usize = index as usize;
-    if local_index == 20 {
-        for i in 15..20 {
-            n_cond_nodes[RELATIVE_INDEX + i].tval =
-                n_cond_nodes[RELATIVE_INDEX + i].val.wrapping_add(dt[i]);
+        if n_cond_nodes[RELATIVE_INDEX + i]
+            .tval
+            .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + i].val)
+            != dt[i]
+        {
+            return i as i32;
         }
     }
+    return 0x1337;
+}
 
-    if local_index != 20 {
-        for i in 0..16 {
-            n_cond_nodes[RELATIVE_INDEX + i].val =
-                n_cond_nodes[RELATIVE_INDEX + i - 1].val.wrapping_add(cls(
-                    md5_values::md5_f(
-                        n_cond_nodes[RELATIVE_INDEX + i - 1].val,
-                        n_cond_nodes[RELATIVE_INDEX + i - 2].val,
-                        n_cond_nodes[RELATIVE_INDEX + i - 3].val,
-                    )
-                    .wrapping_add(n_cond_nodes[RELATIVE_INDEX + i - 4].val)
-                    .wrapping_add(m_block[md5_values::MMAP[i] as usize])
-                    .wrapping_add(md5_values::TMAP[i]),
-                    md5_values::SMAP[i],
-                ));
-
-            n_cond_nodes[RELATIVE_INDEX + i].tval =
-                n_cond_nodes[RELATIVE_INDEX + i - 1].tval.wrapping_add(cls(
-                    md5_values::md5_f(
-                        n_cond_nodes[RELATIVE_INDEX + i - 1].tval,
-                        n_cond_nodes[RELATIVE_INDEX + i - 2].tval,
-                        n_cond_nodes[RELATIVE_INDEX + i - 3].tval,
-                    )
-                    .wrapping_add(n_cond_nodes[RELATIVE_INDEX + i - 4].tval)
-                    .wrapping_add(m_prime_block[md5_values::MMAP[i] as usize])
-                    .wrapping_add(md5_values::TMAP[i]),
-                    md5_values::SMAP[i],
-                ));
-
-            if n_cond_nodes[RELATIVE_INDEX + i]
-                .tval
-                .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + i].val)
-                != dt[i]
-            {
-                return i as i32;
-            }
-        }
-        local_index = 16;
-    }
-
-    for i in local_index..32 {
+fn round2_check_diffs(
+    m_block: &mut [u32; 32],
+    m_prime_block: &mut [u32; 16],
+    n_cond_nodes: &mut [Node; 76],
+    ind: usize,
+    dt: [u32; 68],
+) -> i32 {
+    for i in ind..32 {
         n_cond_nodes[RELATIVE_INDEX + i].val =
             n_cond_nodes[RELATIVE_INDEX + i - 1].val.wrapping_add(cls(
                 md5_values::md5_g(
@@ -707,7 +698,14 @@ fn check_diffs(
             return i as i32;
         }
     }
+    return 0x1337;
+}
 
+fn round3_check_diffs(
+    m_block: &mut [u32; 32],
+    m_prime_block: &mut [u32; 16],
+    n_cond_nodes: &mut [Node; 76]
+) -> i32 {
     for i in 32..48 {
         n_cond_nodes[RELATIVE_INDEX + i].val =
             n_cond_nodes[RELATIVE_INDEX + i - 1].val.wrapping_add(cls(
@@ -742,7 +740,15 @@ fn check_diffs(
             return i as i32;
         }
     }
+    return 0x1337;
+}
 
+fn round4_check_diffs(
+    m_block: &mut [u32; 32],
+    m_prime_block: &mut [u32; 16],
+    n_cond_nodes: &mut [Node; 76],
+    dt: [u32; 68],
+) -> i32 {
     for i in 48..60 {
         n_cond_nodes[RELATIVE_INDEX + i].val =
             n_cond_nodes[RELATIVE_INDEX + i - 1].val.wrapping_add(cls(
@@ -777,6 +783,52 @@ fn check_diffs(
         {
             return i as i32;
         }
+    }
+    return 0x1337;
+}
+
+fn check_diffs(
+    m_block: &mut [u32; 32],
+    n_cond_nodes: &mut [Node; 76],
+    index: i32,
+    dt: [u32; 68]
+) -> i32 {
+    let mut m_prime_block: [u32; 16] = [0; 16];
+    m_prime_block.copy_from_slice(&m_block[..16]);
+
+    m_prime_block[4] = addsub_bit(m_prime_block[4], 31, 1);
+    m_prime_block[11] = addsub_bit(m_prime_block[11], 15, 1);
+    m_prime_block[14] = addsub_bit(m_prime_block[14], 31, 1);
+
+    let mut local_index: usize = index as usize;
+    if local_index == 20 {
+        for i in 15..20 {
+            n_cond_nodes[RELATIVE_INDEX + i].tval =
+                n_cond_nodes[RELATIVE_INDEX + i].val.wrapping_add(dt[i]);
+        }
+    }
+
+    if local_index != 20 {
+        let ret = round1_check_diffs(m_block, &mut m_prime_block, n_cond_nodes, dt);
+        if ret != 0x1337 {
+            return ret;
+        }
+        local_index = 16;
+    }
+
+    let ret = round2_check_diffs(m_block, &mut m_prime_block, n_cond_nodes, local_index, dt);
+    if ret != 0x1337 {
+        return ret;
+    }
+
+    let ret = round3_check_diffs(m_block, &mut m_prime_block, n_cond_nodes);
+    if ret != 0x1337 {
+        return ret;
+    }
+
+    let ret = round4_check_diffs(m_block, &mut m_prime_block, n_cond_nodes, dt);
+    if ret != 0x1337 {
+        return ret;
     }
 
     for i in 60..64 {
