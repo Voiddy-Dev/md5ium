@@ -48,15 +48,15 @@ fn main() {
     let mut output_file_2: Vec<u8> = Vec::new();
 
     // First Iteration
-    let mut cv_two_blocks = calculate_m_and_mprime(default_iv);
+    let cv_two_blocks = calculate_m_and_mprime(default_iv);
     add_to_output(cv_two_blocks.1, &mut output_file_1);
     add_to_output(cv_two_blocks.2, &mut output_file_2);
 
-    for _ in 0..2 {
-        cv_two_blocks = calculate_m_and_mprime(cv_two_blocks.0);
-        add_to_output(cv_two_blocks.1, &mut output_file_1);
-        add_to_output(cv_two_blocks.2, &mut output_file_2);
-    }
+    // for _ in 0..2 {
+    //     cv_two_blocks = calculate_m_and_mprime(cv_two_blocks.0);
+    //     add_to_output(cv_two_blocks.1, &mut output_file_1);
+    //     add_to_output(cv_two_blocks.2, &mut output_file_2);
+    // }
 
     assert_ne!(output_file_1, output_file_2);
     // Writing the blocks to a file

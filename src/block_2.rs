@@ -130,20 +130,17 @@ fn md5_rl(var: u32, num: i32) -> u32 {
 fn findx(q_cond_nodes: &mut [u32; 68], m_block: &mut [u32; 16], m_prime_block: &mut [u32; 16]) {
     for i in 4..20 {
         m_block[i - 4] = md5_rr(
-            q_cond_nodes[i].overflowing_sub(q_cond_nodes[i - 1]).0,
+            q_cond_nodes[i].wrapping_sub(q_cond_nodes[i - 1]),
             md5_values::SMAP[i - 4],
         )
-        .overflowing_sub(md5_values::TMAP[i - 4])
-        .0
-        .overflowing_sub(q_cond_nodes[i - 4])
-        .0
-        .overflowing_sub(phi(q_cond_nodes, i))
-        .0;
+        .wrapping_sub(md5_values::TMAP[i - 4])
+        .wrapping_sub(q_cond_nodes[i - 4])
+        .wrapping_sub(phi(q_cond_nodes, i));
         m_prime_block[i - 4] = m_block[i - 4];
     }
-    m_prime_block[4] = m_prime_block[4].overflowing_sub(0x80000000).0;
-    m_prime_block[11] = m_prime_block[11].overflowing_sub(0x8000).0;
-    m_prime_block[14] = m_prime_block[14].overflowing_sub(0x80000000).0;
+    m_prime_block[4] = m_prime_block[4].wrapping_sub(0x80000000);
+    m_prime_block[11] = m_prime_block[11].wrapping_sub(0x8000);
+    m_prime_block[14] = m_prime_block[14].wrapping_sub(0x80000000);
 }
 
 fn md5step20(
@@ -159,41 +156,30 @@ fn md5step20(
     let mut t;
     let mut t1;
     for j in 0..16 {
-        t = a
-            .overflowing_add(
-                ((b & c) | ((!b) & d))
-                    .overflowing_add(m_block[md5_values::MMAP[j] as usize])
-                    .0
-                    .overflowing_add(md5_values::TMAP[j])
-                    .0,
-            )
-            .0;
+        t = a.wrapping_add(
+            ((b & c) | ((!b) & d))
+                .wrapping_add(m_block[md5_values::MMAP[j] as usize])
+                .wrapping_add(md5_values::TMAP[j]),
+        );
         let temp = d;
         d = c;
         c = b;
         a = temp;
         t1 = t >> (32 - md5_values::SMAP[j]);
-        b = b
-            .overflowing_add((t << md5_values::SMAP[j]).overflowing_add(t1).0)
-            .0;
+        b = b.wrapping_add((t << md5_values::SMAP[j]).wrapping_add(t1));
         vals[j + 4] = b;
     }
     for j in 16..21 {
         t = a
-            .overflowing_add((b & d) | (c & !d))
-            .0
-            .overflowing_add(m_block[md5_values::MMAP[j] as usize])
-            .0
-            .overflowing_add(md5_values::TMAP[j])
-            .0;
+            .wrapping_add((b & d) | (c & !d))
+            .wrapping_add(m_block[md5_values::MMAP[j] as usize])
+            .wrapping_add(md5_values::TMAP[j]);
         let temp = d;
         d = c;
         c = b;
         a = temp;
         t1 = t >> (32 - md5_values::SMAP[j]);
-        b = b
-            .overflowing_add((t << md5_values::SMAP[j]).overflowing_add(t1).0)
-            .0;
+        b = b.wrapping_add((t << md5_values::SMAP[j]).wrapping_add(t1));
         vals[j + 4] = b;
     }
     a = vals1[0];
@@ -204,36 +190,28 @@ fn md5step20(
     // t1;
     for j in 0..16 {
         t = a
-            .overflowing_add((b & c) | ((!b) & d))
-            .0
-            .overflowing_add(m_prime_block[md5_values::MMAP[j] as usize])
-            .0
-            .overflowing_add(md5_values::TMAP[j])
-            .0;
+            .wrapping_add((b & c) | ((!b) & d))
+            .wrapping_add(m_prime_block[md5_values::MMAP[j] as usize])
+            .wrapping_add(md5_values::TMAP[j]);
         let temp = d;
         d = c;
         c = b;
         a = temp;
         t1 = t >> (32 - md5_values::SMAP[j]);
-        b = b.overflowing_add((t << md5_values::SMAP[j]) + t1).0;
+        b = b.wrapping_add((t << md5_values::SMAP[j]) + t1);
         vals1[j + 4] = b;
     }
     for j in 16..21 {
         t = a
-            .overflowing_add((b & d) | (c & !d))
-            .0
-            .overflowing_add(m_prime_block[md5_values::MMAP[j] as usize])
-            .0
-            .overflowing_add(md5_values::TMAP[j])
-            .0;
+            .wrapping_add((b & d) | (c & !d))
+            .wrapping_add(m_prime_block[md5_values::MMAP[j] as usize])
+            .wrapping_add(md5_values::TMAP[j]);
         let temp = d;
         d = c;
         c = b;
         a = temp;
         t1 = t >> (32 - md5_values::SMAP[j]);
-        b = b
-            .overflowing_add((t << md5_values::SMAP[j]).overflowing_add(t1).0)
-            .0;
+        b = b.wrapping_add((t << md5_values::SMAP[j]).wrapping_add(t1));
         vals1[j + 4] = b;
     }
 }
@@ -401,28 +379,18 @@ fn md5step(
     let mut t;
     let mut t1;
     t = out[j]
-        .overflowing_add(cover_func(out[j + 3], out[j + 2], out[j + 1], j))
-        .0
-        .overflowing_add(m_block[md5_values::MMAP[j] as usize])
-        .0
-        .overflowing_add(md5_values::TMAP[j])
-        .0;
+        .wrapping_add(cover_func(out[j + 3], out[j + 2], out[j + 1], j))
+        .wrapping_add(m_block[md5_values::MMAP[j] as usize])
+        .wrapping_add(md5_values::TMAP[j]);
     t1 = t >> (32 - md5_values::SMAP[j]);
-    t1 = out[j + 3]
-        .overflowing_add((t << md5_values::SMAP[j]).overflowing_add(t1).0)
-        .0;
+    t1 = out[j + 3].wrapping_add((t << md5_values::SMAP[j]).wrapping_add(t1));
     out[j + 4] = t1;
     t = out1[j]
-        .overflowing_add(cover_func(out1[j + 3], out1[j + 2], out1[j + 1], j))
-        .0
-        .overflowing_add(m_prime_block[md5_values::MMAP[j] as usize])
-        .0
-        .overflowing_add(md5_values::TMAP[j])
-        .0;
+        .wrapping_add(cover_func(out1[j + 3], out1[j + 2], out1[j + 1], j))
+        .wrapping_add(m_prime_block[md5_values::MMAP[j] as usize])
+        .wrapping_add(md5_values::TMAP[j]);
     t1 = t >> (32 - md5_values::SMAP[j]);
-    t1 = out1[j + 3]
-        .overflowing_add((t << md5_values::SMAP[j]).overflowing_add(t1).0)
-        .0;
+    t1 = out1[j + 3].wrapping_add((t << md5_values::SMAP[j]).wrapping_add(t1));
     out1[j + 4] = t1;
 }
 
@@ -475,18 +443,13 @@ fn multi_msg_2(
                 q_cond_nodes[14] = q_cond_nodes[14] & 0x7fffffff;
             }
 
-            q_cond_nodes[15] = q_cond_nodes[14]
-                .overflowing_add(md5_rl(
-                    phi(q_cond_nodes, 15)
-                        .overflowing_add(0x895cd7be)
-                        .0
-                        .overflowing_add(m_block[11])
-                        .0
-                        .overflowing_add(q_cond_nodes[11])
-                        .0,
-                    22,
-                ))
-                .0;
+            q_cond_nodes[15] = q_cond_nodes[14].wrapping_add(md5_rl(
+                phi(q_cond_nodes, 15)
+                    .wrapping_add(0x895cd7be)
+                    .wrapping_add(m_block[11])
+                    .wrapping_add(q_cond_nodes[11]),
+                22,
+            ));
 
             if (q_cond_nodes[15] & 0xfff81fff) == q_cond_nodes[15]
                 && (q_cond_nodes[15] | 0x00081080) == q_cond_nodes[15]
@@ -494,21 +457,18 @@ fn multi_msg_2(
             {
                 for i in 7..16 {
                     m_block[i] = md5_rr(
-                        q_cond_nodes[i + 4].overflowing_sub(q_cond_nodes[i + 3]).0,
+                        q_cond_nodes[i + 4].wrapping_sub(q_cond_nodes[i + 3]),
                         md5_values::SMAP[i],
                     )
-                    .overflowing_sub(md5_values::TMAP[i])
-                    .0
-                    .overflowing_sub(q_cond_nodes[i])
-                    .0
-                    .overflowing_sub(phi(q_cond_nodes, i + 4))
-                    .0;
+                    .wrapping_sub(md5_values::TMAP[i])
+                    .wrapping_sub(q_cond_nodes[i])
+                    .wrapping_sub(phi(q_cond_nodes, i + 4));
                 }
                 for v in 7..16 {
                     m_prime_block[v] = m_block[v];
                 }
-                m_prime_block[11] = m_prime_block[11].overflowing_sub(0x8000).0;
-                m_prime_block[14] = m_prime_block[14].overflowing_sub(0x80000000).0;
+                m_prime_block[11] = m_prime_block[11].wrapping_sub(0x8000);
+                m_prime_block[14] = m_prime_block[14].wrapping_sub(0x80000000);
                 md5step20(m_block, q_cond_nodes, m_prime_block, q_prime);
             }
         }
@@ -621,15 +581,12 @@ fn multi_msg_2(
 
             for p in 8..14 {
                 m_block[p] = md5_rr(
-                    q_cond_nodes[p + 4].overflowing_sub(q_cond_nodes[p + 3]).0,
+                    q_cond_nodes[p + 4].wrapping_sub(q_cond_nodes[p + 3]),
                     md5_values::SMAP[p],
                 )
-                .overflowing_sub(md5_values::TMAP[p])
-                .0
-                .overflowing_sub(q_cond_nodes[p])
-                .0
-                .overflowing_sub(phi(q_cond_nodes, p + 4))
-                .0;
+                .wrapping_sub(md5_values::TMAP[p])
+                .wrapping_sub(q_cond_nodes[p])
+                .wrapping_sub(phi(q_cond_nodes, p + 4));
                 m_prime_block[p] = m_block[p];
             }
             m_prime_block[11] = m_prime_block[11] - 0x8000;

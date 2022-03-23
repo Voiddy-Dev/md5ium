@@ -30,10 +30,10 @@ fn addsub_bit(x: u32, i: i32, b: i32) -> u32 {
     if overflow {
         t = 0;
     } else {
-        (t, _) = b.overflowing_mul(res);
+        t = b.wrapping_mul(res);
     }
     // x + t
-    let (return_val, _) = x.overflowing_add(t as u32);
+    let return_val = x.wrapping_add(t as u32);
     return_val
 }
 
@@ -92,7 +92,7 @@ impl Default for Node {
     }
 }
 
-fn smm5(index: i32, n_cond_nodes: &mut [Node; 76]) -> u32 {
+fn single_msg_modif(index: i32, n_cond_nodes: &mut [Node; 76]) -> u32 {
     let mut y: u32;
     let mut b2: i32;
     let mut i1: i32;
@@ -128,20 +128,16 @@ fn smm5(index: i32, n_cond_nodes: &mut [Node; 76]) -> u32 {
         i4 += 68;
     }
     return crs(
-        x.overflowing_sub(n_cond_nodes[RELATIVE_INDEX + i1 as usize].val)
-            .0,
+        x.wrapping_sub(n_cond_nodes[RELATIVE_INDEX + i1 as usize].val),
         md5_values::SMAP[index as usize],
     )
-    .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + i4 as usize].val)
-    .0
-    .overflowing_sub(md5_values::md5_f(
+    .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + i4 as usize].val)
+    .wrapping_sub(md5_values::md5_f(
         n_cond_nodes[RELATIVE_INDEX + i1 as usize].val,
         n_cond_nodes[RELATIVE_INDEX + i2 as usize].val,
         n_cond_nodes[RELATIVE_INDEX + i3 as usize].val,
     ))
-    .0
-    .overflowing_sub(md5_values::TMAP[index as usize])
-    .0;
+    .wrapping_sub(md5_values::TMAP[index as usize]);
 }
 
 fn build_bitfield(n_cond_nodes: &mut [Node; 76]) {
@@ -181,14 +177,14 @@ fn construct_diff_table() -> [u32; 68] {
     diff_table[6] = addsub_bit(0, 6, -1);
     diff_table[6] = addsub_bit(diff_table[6], 23, 1);
     diff_table[6] -= 1;
-    diff_table[6] = diff_table[6].overflowing_sub(addsub_bit(0, 27, 1)).0;
+    diff_table[6] = diff_table[6].wrapping_sub(addsub_bit(0, 27, 1));
     diff_table[7] += 1;
-    diff_table[7] = diff_table[7].overflowing_sub(addsub_bit(0, 15, 1)).0;
-    diff_table[7] = diff_table[7].overflowing_sub(addsub_bit(0, 17, 1)).0;
-    diff_table[7] = diff_table[7].overflowing_sub(addsub_bit(0, 23, 1)).0;
+    diff_table[7] = diff_table[7].wrapping_sub(addsub_bit(0, 15, 1));
+    diff_table[7] = diff_table[7].wrapping_sub(addsub_bit(0, 17, 1));
+    diff_table[7] = diff_table[7].wrapping_sub(addsub_bit(0, 23, 1));
     diff_table[8] += 1;
-    diff_table[8] = diff_table[8].overflowing_sub(addsub_bit(0, 6, 1)).0;
-    diff_table[8] = diff_table[8].overflowing_add(addsub_bit(0, 31, 1)).0;
+    diff_table[8] = diff_table[8].wrapping_sub(addsub_bit(0, 6, 1));
+    diff_table[8] = diff_table[8].wrapping_add(addsub_bit(0, 31, 1));
     diff_table[9] += addsub_bit(0, 12, 1);
     diff_table[9] += addsub_bit(0, 31, 1);
     diff_table[10] += addsub_bit(0, 31, 1);
@@ -241,85 +237,111 @@ fn construct_diff_table() -> [u32; 68] {
     diff_table
 }
 
+/// Function to satisfy first round differentials
 fn first_round(m_block: &mut [u32; 32], n_cond_nodes: &mut [Node; 76], diff_table: [u32; 68]) {
-    let mut flag: i32 = 0;
-
-    while flag == 0 {
-        flag = 1;
-
+    loop {
+        let mut breakout = true;
+        // Go through the first round values
         for i in 0..16 {
-            n_cond_nodes[RELATIVE_INDEX + i].val = n_cond_nodes[RELATIVE_INDEX + i - 1]
-                .val
-                .overflowing_add(cls(
+            n_cond_nodes[RELATIVE_INDEX + i].val =
+                n_cond_nodes[RELATIVE_INDEX + i - 1].val.wrapping_add(cls(
                     md5_values::md5_f(
                         n_cond_nodes[RELATIVE_INDEX + i - 1].val,
                         n_cond_nodes[RELATIVE_INDEX + i - 2].val,
                         n_cond_nodes[RELATIVE_INDEX + i - 3].val,
                     )
-                    .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].val)
-                    .0
-                    .overflowing_add(m_block[i])
-                    .0
-                    .overflowing_add(md5_values::TMAP[i])
-                    .0,
+                    .wrapping_add(n_cond_nodes[RELATIVE_INDEX + i - 4].val)
+                    .wrapping_add(m_block[i])
+                    .wrapping_add(md5_values::TMAP[i]),
                     md5_values::SMAP[i],
-                ))
-                .0;
-            m_block[i] = smm5(i as i32, n_cond_nodes);
-            n_cond_nodes[RELATIVE_INDEX + i].val = n_cond_nodes[RELATIVE_INDEX + i - 1]
-                .val
-                .overflowing_add(cls(
+                ));
+            m_block[i] = single_msg_modif(i as i32, n_cond_nodes);
+            n_cond_nodes[RELATIVE_INDEX + i].val =
+                n_cond_nodes[RELATIVE_INDEX + i - 1].val.wrapping_add(cls(
                     md5_values::md5_f(
                         n_cond_nodes[RELATIVE_INDEX + i - 1].val,
                         n_cond_nodes[RELATIVE_INDEX + i - 2].val,
                         n_cond_nodes[RELATIVE_INDEX + i - 3].val,
                     )
-                    .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].val)
-                    .0
-                    .overflowing_add(m_block[i])
-                    .0
-                    .overflowing_add(md5_values::TMAP[i])
-                    .0,
+                    .wrapping_add(n_cond_nodes[RELATIVE_INDEX + i - 4].val)
+                    .wrapping_add(m_block[i])
+                    .wrapping_add(md5_values::TMAP[i]),
                     md5_values::SMAP[i],
-                ))
-                .0;
-        }
-        m_block[4] = addsub_bit(m_block[4], 31, 1);
-        m_block[11] = addsub_bit(m_block[11], 15, 1);
-        m_block[14] = addsub_bit(m_block[14], 31, 1);
+                ));
 
-        for i in 0..16 {
-            n_cond_nodes[RELATIVE_INDEX + i].tval = n_cond_nodes[RELATIVE_INDEX + i - 1]
-                .tval
-                .overflowing_add(cls(
+            if i == 4 || i == 14 {
+                m_block[i] = addsub_bit(m_block[i], 31, 1);
+            } else if i == 11 {
+                m_block[i] = addsub_bit(m_block[i], 15, 1);
+            }
+
+            n_cond_nodes[RELATIVE_INDEX + i].tval =
+                n_cond_nodes[RELATIVE_INDEX + i - 1].tval.wrapping_add(cls(
                     md5_values::md5_f(
                         n_cond_nodes[RELATIVE_INDEX + i - 1].tval,
                         n_cond_nodes[RELATIVE_INDEX + i - 2].tval,
                         n_cond_nodes[RELATIVE_INDEX + i - 3].tval,
                     )
-                    .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].tval)
-                    .0
-                    .overflowing_add(m_block[i])
-                    .0
-                    .overflowing_add(md5_values::TMAP[i])
-                    .0,
+                    .wrapping_add(n_cond_nodes[RELATIVE_INDEX + i - 4].tval)
+                    .wrapping_add(m_block[i])
+                    .wrapping_add(md5_values::TMAP[i]),
                     md5_values::SMAP[i],
-                ))
-                .0;
+                ));
 
             if n_cond_nodes[RELATIVE_INDEX + i]
                 .tval
-                .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + i].val)
-                .0
+                .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + i].val)
                 != diff_table[i]
             {
-                flag = 0;
+                // differential is not satisfied
                 new_rand_mblock(m_block);
+                if i == 4 || i == 14 {
+                    m_block[i] = addsub_bit(m_block[i], 31, -1);
+                } else if i == 11 {
+                    m_block[i] = addsub_bit(m_block[i], 15, -1);
+                }
+                breakout = false;
+                break;
+            }
+            if i == 4 || i == 14 {
+                m_block[i] = addsub_bit(m_block[i], 31, -1);
+            } else if i == 11 {
+                m_block[i] = addsub_bit(m_block[i], 15, -1);
             }
         }
-        m_block[4] = addsub_bit(m_block[4], 31, -1);
-        m_block[11] = addsub_bit(m_block[11], 15, -1);
-        m_block[14] = addsub_bit(m_block[14], 31, -1);
+        if breakout {
+            break;
+        }
+        // m_block[4] = addsub_bit(m_block[4], 31, 1);
+        // m_block[11] = addsub_bit(m_block[11], 15, 1);
+        // m_block[14] = addsub_bit(m_block[14], 31, 1);
+
+        // for i in 0..16 {
+        //     n_cond_nodes[RELATIVE_INDEX + i].tval =
+        //         n_cond_nodes[RELATIVE_INDEX + i - 1].tval.wrapping_add(cls(
+        //             md5_values::md5_f(
+        //                 n_cond_nodes[RELATIVE_INDEX + i - 1].tval,
+        //                 n_cond_nodes[RELATIVE_INDEX + i - 2].tval,
+        //                 n_cond_nodes[RELATIVE_INDEX + i - 3].tval,
+        //             )
+        //             .wrapping_add(n_cond_nodes[RELATIVE_INDEX + i - 4].tval)
+        //             .wrapping_add(m_block[i])
+        //             .wrapping_add(md5_values::TMAP[i]),
+        //             md5_values::SMAP[i],
+        //         ));
+
+        //     if n_cond_nodes[RELATIVE_INDEX + i]
+        //         .tval
+        //         .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + i].val)
+        //         != diff_table[i]
+        //     {
+        //         flag = 0;
+        //         new_rand_mblock(m_block);
+        //     }
+        // }
+        // m_block[4] = addsub_bit(m_block[4], 31, -1);
+        // m_block[11] = addsub_bit(m_block[11], 15, -1);
+        // m_block[14] = addsub_bit(m_block[14], 31, -1);
     }
 }
 
@@ -353,7 +375,7 @@ fn fcheck_cond(ind: i32, n_cond_nodes: &mut [Node; 76]) -> u32 {
                         & n_cond_nodes[RELATIVE_INDEX + ind as usize].bf[2]);
             }
             _ => {
-                panic!("BRUV LI MUST BE SOME");
+                panic!("LI MUST BE SOME");
             }
         }
     }
@@ -394,40 +416,30 @@ fn klima1_3(m_block: &mut [u32; 32], n_cond_nodes: &mut [Node; 76]) -> bool {
         }
 
         n_cond_nodes[RELATIVE_INDEX + 16].val = x;
-        n_cond_nodes[RELATIVE_INDEX + 17].val = n_cond_nodes[RELATIVE_INDEX + 16]
-            .val
-            .overflowing_add(cls(
+        n_cond_nodes[RELATIVE_INDEX + 17].val =
+            n_cond_nodes[RELATIVE_INDEX + 16].val.wrapping_add(cls(
                 md5_values::md5_g(
                     n_cond_nodes[RELATIVE_INDEX + 16].val,
                     n_cond_nodes[RELATIVE_INDEX + 15].val,
                     n_cond_nodes[RELATIVE_INDEX + 14].val,
                 )
-                .overflowing_add(n_cond_nodes[RELATIVE_INDEX + 13].val)
-                .0
-                .overflowing_add(m_block[6])
-                .0
-                .overflowing_add(md5_values::TMAP[17])
-                .0,
+                .wrapping_add(n_cond_nodes[RELATIVE_INDEX + 13].val)
+                .wrapping_add(m_block[6])
+                .wrapping_add(md5_values::TMAP[17]),
                 md5_values::SMAP[17],
-            ))
-            .0;
-        n_cond_nodes[RELATIVE_INDEX + 18].val = n_cond_nodes[RELATIVE_INDEX + 17]
-            .val
-            .overflowing_add(cls(
+            ));
+        n_cond_nodes[RELATIVE_INDEX + 18].val =
+            n_cond_nodes[RELATIVE_INDEX + 17].val.wrapping_add(cls(
                 md5_values::md5_g(
                     n_cond_nodes[RELATIVE_INDEX + 17].val,
                     n_cond_nodes[RELATIVE_INDEX + 16].val,
                     n_cond_nodes[RELATIVE_INDEX + 15].val,
                 )
-                .overflowing_add(n_cond_nodes[RELATIVE_INDEX + 14].val)
-                .0
-                .overflowing_add(m_block[11])
-                .0
-                .overflowing_add(md5_values::TMAP[18])
-                .0,
+                .wrapping_add(n_cond_nodes[RELATIVE_INDEX + 14].val)
+                .wrapping_add(m_block[11])
+                .wrapping_add(md5_values::TMAP[18]),
                 md5_values::SMAP[18],
-            ))
-            .0;
+            ));
     }
     false
 }
@@ -440,156 +452,115 @@ fn klima4_9(m_block: &mut [u32; 32], n_cond_nodes: &mut [Node; 76], g_n19: &mut 
     m_block[0] = crs(
         n_cond_nodes[RELATIVE_INDEX + 19]
             .val
-            .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 18].val)
-            .0,
+            .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + 18].val),
         20,
     )
-    .overflowing_sub(md5_values::md5_g(
+    .wrapping_sub(md5_values::md5_g(
         n_cond_nodes[RELATIVE_INDEX + 18].val,
         n_cond_nodes[RELATIVE_INDEX + 17].val,
         n_cond_nodes[RELATIVE_INDEX + 16].val,
     ))
-    .0
-    .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 15].val)
-    .0
-    .overflowing_sub(0xe9b6c7aa)
-    .0;
-    n_cond_nodes[RELATIVE_INDEX + 0].val = n_cond_nodes[RELATIVE_INDEX + 67]
-        .val
-        .overflowing_add(cls(
-            m_block[0]
-                .overflowing_add(n_cond_nodes[RELATIVE_INDEX + 64].val)
-                .0
-                .overflowing_add(md5_values::md5_f(
-                    n_cond_nodes[RELATIVE_INDEX + 67].val,
-                    n_cond_nodes[RELATIVE_INDEX + 66].val,
-                    n_cond_nodes[RELATIVE_INDEX + 65].val,
-                ))
-                .0
-                .overflowing_add(md5_values::TMAP[0])
-                .0,
-            md5_values::SMAP[0],
-        ))
-        .0;
+    .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + 15].val)
+    .wrapping_sub(0xe9b6c7aa);
+    n_cond_nodes[RELATIVE_INDEX + 0].val = n_cond_nodes[RELATIVE_INDEX + 67].val.wrapping_add(cls(
+        m_block[0]
+            .wrapping_add(n_cond_nodes[RELATIVE_INDEX + 64].val)
+            .wrapping_add(md5_values::md5_f(
+                n_cond_nodes[RELATIVE_INDEX + 67].val,
+                n_cond_nodes[RELATIVE_INDEX + 66].val,
+                n_cond_nodes[RELATIVE_INDEX + 65].val,
+            ))
+            .wrapping_add(md5_values::TMAP[0]),
+        md5_values::SMAP[0],
+    ));
     m_block[1] = crs(
         n_cond_nodes[RELATIVE_INDEX + 16]
             .val
-            .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 15].val)
-            .0,
+            .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + 15].val),
         5,
     )
-    .overflowing_sub(md5_values::md5_g(
+    .wrapping_sub(md5_values::md5_g(
         n_cond_nodes[RELATIVE_INDEX + 15].val,
         n_cond_nodes[RELATIVE_INDEX + 14].val,
         n_cond_nodes[RELATIVE_INDEX + 13].val,
     ))
-    .0
-    .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 12].val)
-    .0
-    .overflowing_sub(0xf61e2562)
-    .0;
-    n_cond_nodes[RELATIVE_INDEX + 1].val = n_cond_nodes[RELATIVE_INDEX + 0]
-        .val
-        .overflowing_add(cls(
-            m_block[1]
-                .overflowing_add(n_cond_nodes[RELATIVE_INDEX + 65].val)
-                .0
-                .overflowing_add(md5_values::md5_f(
-                    n_cond_nodes[RELATIVE_INDEX + 0].val,
-                    n_cond_nodes[RELATIVE_INDEX + 67].val,
-                    n_cond_nodes[RELATIVE_INDEX + 66].val,
-                ))
-                .0
-                .overflowing_add(md5_values::TMAP[1])
-                .0,
-            md5_values::SMAP[1],
-        ))
-        .0;
+    .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + 12].val)
+    .wrapping_sub(0xf61e2562);
+    n_cond_nodes[RELATIVE_INDEX + 1].val = n_cond_nodes[RELATIVE_INDEX + 0].val.wrapping_add(cls(
+        m_block[1]
+            .wrapping_add(n_cond_nodes[RELATIVE_INDEX + 65].val)
+            .wrapping_add(md5_values::md5_f(
+                n_cond_nodes[RELATIVE_INDEX + 0].val,
+                n_cond_nodes[RELATIVE_INDEX + 67].val,
+                n_cond_nodes[RELATIVE_INDEX + 66].val,
+            ))
+            .wrapping_add(md5_values::TMAP[1]),
+        md5_values::SMAP[1],
+    ));
     m_block[2] = crs(
         n_cond_nodes[RELATIVE_INDEX + 2]
             .val
-            .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 1].val)
-            .0,
+            .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + 1].val),
         17,
     )
-    .overflowing_sub(md5_values::md5_f(
+    .wrapping_sub(md5_values::md5_f(
         n_cond_nodes[RELATIVE_INDEX + 1].val,
         n_cond_nodes[RELATIVE_INDEX + 0].val,
         n_cond_nodes[RELATIVE_INDEX + 67].val,
     ))
-    .0
-    .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 66].val)
-    .0
-    .overflowing_sub(md5_values::TMAP[2])
-    .0;
+    .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + 66].val)
+    .wrapping_sub(md5_values::TMAP[2]);
     m_block[3] = crs(
         n_cond_nodes[RELATIVE_INDEX + 3]
             .val
-            .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 2].val)
-            .0,
+            .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + 2].val),
         22,
     )
-    .overflowing_sub(md5_values::md5_f(
+    .wrapping_sub(md5_values::md5_f(
         n_cond_nodes[RELATIVE_INDEX + 2].val,
         n_cond_nodes[RELATIVE_INDEX + 1].val,
         n_cond_nodes[RELATIVE_INDEX + 0].val,
     ))
-    .0
-    .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 67].val)
-    .0
-    .overflowing_sub(md5_values::TMAP[3])
-    .0;
+    .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + 67].val)
+    .wrapping_sub(md5_values::TMAP[3]);
     m_block[4] = crs(
         n_cond_nodes[RELATIVE_INDEX + 4]
             .val
-            .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 3].val)
-            .0,
+            .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + 3].val),
         7,
     )
-    .overflowing_sub(md5_values::md5_f(
+    .wrapping_sub(md5_values::md5_f(
         n_cond_nodes[RELATIVE_INDEX + 3].val,
         n_cond_nodes[RELATIVE_INDEX + 2].val,
         n_cond_nodes[RELATIVE_INDEX + 1].val,
     ))
-    .0
-    .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 0].val)
-    .0
-    .overflowing_sub(md5_values::TMAP[4])
-    .0;
+    .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + 0].val)
+    .wrapping_sub(md5_values::TMAP[4]);
     m_block[5] = crs(
         n_cond_nodes[RELATIVE_INDEX + 5]
             .val
-            .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 4].val)
-            .0,
+            .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + 4].val),
         12,
     )
-    .overflowing_sub(md5_values::md5_f(
+    .wrapping_sub(md5_values::md5_f(
         n_cond_nodes[RELATIVE_INDEX + 4].val,
         n_cond_nodes[RELATIVE_INDEX + 3].val,
         n_cond_nodes[RELATIVE_INDEX + 2].val,
     ))
-    .0
-    .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + 1].val)
-    .0
-    .overflowing_sub(md5_values::TMAP[5])
-    .0;
-    n_cond_nodes[RELATIVE_INDEX + 20].val = n_cond_nodes[RELATIVE_INDEX + 19]
-        .val
-        .overflowing_add(cls(
+    .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + 1].val)
+    .wrapping_sub(md5_values::TMAP[5]);
+    n_cond_nodes[RELATIVE_INDEX + 20].val =
+        n_cond_nodes[RELATIVE_INDEX + 19].val.wrapping_add(cls(
             m_block[5]
-                .overflowing_add(n_cond_nodes[RELATIVE_INDEX + 16].val)
-                .0
-                .overflowing_add(md5_values::md5_g(
+                .wrapping_add(n_cond_nodes[RELATIVE_INDEX + 16].val)
+                .wrapping_add(md5_values::md5_g(
                     n_cond_nodes[RELATIVE_INDEX + 19].val,
                     n_cond_nodes[RELATIVE_INDEX + 18].val,
                     n_cond_nodes[RELATIVE_INDEX + 17].val,
                 ))
-                .0
-                .overflowing_add(0xd62f105d)
-                .0,
+                .wrapping_add(0xd62f105d),
             5,
-        ))
-        .0;
+        ));
     if fcheck_cond(20, n_cond_nodes) != 0 {
         *g_n19 += 0x7f;
         fix_n19(g_n19);
@@ -658,55 +629,42 @@ fn check_diffs(
     let mut local_index: usize = index as usize;
     if local_index == 20 {
         for i in 15..20 {
-            n_cond_nodes[RELATIVE_INDEX + i].tval = n_cond_nodes[RELATIVE_INDEX + i]
-                .val
-                .overflowing_add(dt[i])
-                .0;
+            n_cond_nodes[RELATIVE_INDEX + i].tval =
+                n_cond_nodes[RELATIVE_INDEX + i].val.wrapping_add(dt[i]);
         }
     }
 
     if local_index != 20 {
         for i in 0..16 {
-            n_cond_nodes[RELATIVE_INDEX + i].val = n_cond_nodes[RELATIVE_INDEX + i - 1]
-                .val
-                .overflowing_add(cls(
+            n_cond_nodes[RELATIVE_INDEX + i].val =
+                n_cond_nodes[RELATIVE_INDEX + i - 1].val.wrapping_add(cls(
                     md5_values::md5_f(
                         n_cond_nodes[RELATIVE_INDEX + i - 1].val,
                         n_cond_nodes[RELATIVE_INDEX + i - 2].val,
                         n_cond_nodes[RELATIVE_INDEX + i - 3].val,
                     )
-                    .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].val)
-                    .0
-                    .overflowing_add(m_block[md5_values::MMAP[i] as usize])
-                    .0
-                    .overflowing_add(md5_values::TMAP[i])
-                    .0,
+                    .wrapping_add(n_cond_nodes[RELATIVE_INDEX + i - 4].val)
+                    .wrapping_add(m_block[md5_values::MMAP[i] as usize])
+                    .wrapping_add(md5_values::TMAP[i]),
                     md5_values::SMAP[i],
-                ))
-                .0;
+                ));
 
-            n_cond_nodes[RELATIVE_INDEX + i].tval = n_cond_nodes[RELATIVE_INDEX + i - 1]
-                .tval
-                .overflowing_add(cls(
+            n_cond_nodes[RELATIVE_INDEX + i].tval =
+                n_cond_nodes[RELATIVE_INDEX + i - 1].tval.wrapping_add(cls(
                     md5_values::md5_f(
                         n_cond_nodes[RELATIVE_INDEX + i - 1].tval,
                         n_cond_nodes[RELATIVE_INDEX + i - 2].tval,
                         n_cond_nodes[RELATIVE_INDEX + i - 3].tval,
                     )
-                    .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].tval)
-                    .0
-                    .overflowing_add(m_prime_block[md5_values::MMAP[i] as usize])
-                    .0
-                    .overflowing_add(md5_values::TMAP[i])
-                    .0,
+                    .wrapping_add(n_cond_nodes[RELATIVE_INDEX + i - 4].tval)
+                    .wrapping_add(m_prime_block[md5_values::MMAP[i] as usize])
+                    .wrapping_add(md5_values::TMAP[i]),
                     md5_values::SMAP[i],
-                ))
-                .0;
+                ));
 
             if n_cond_nodes[RELATIVE_INDEX + i]
                 .tval
-                .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + i].val)
-                .0
+                .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + i].val)
                 != dt[i]
             {
                 return i as i32;
@@ -716,45 +674,34 @@ fn check_diffs(
     }
 
     for i in local_index..32 {
-        n_cond_nodes[RELATIVE_INDEX + i].val = n_cond_nodes[RELATIVE_INDEX + i - 1]
-            .val
-            .overflowing_add(cls(
+        n_cond_nodes[RELATIVE_INDEX + i].val =
+            n_cond_nodes[RELATIVE_INDEX + i - 1].val.wrapping_add(cls(
                 md5_values::md5_g(
                     n_cond_nodes[RELATIVE_INDEX + i - 1].val,
                     n_cond_nodes[RELATIVE_INDEX + i - 2].val,
                     n_cond_nodes[RELATIVE_INDEX + i - 3].val,
                 )
-                .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].val)
-                .0
-                .overflowing_add(m_block[md5_values::MMAP[i] as usize])
-                .0
-                .overflowing_add(md5_values::TMAP[i])
-                .0,
+                .wrapping_add(n_cond_nodes[RELATIVE_INDEX + i - 4].val)
+                .wrapping_add(m_block[md5_values::MMAP[i] as usize])
+                .wrapping_add(md5_values::TMAP[i]),
                 md5_values::SMAP[i],
-            ))
-            .0;
+            ));
 
-        n_cond_nodes[RELATIVE_INDEX + i].tval = n_cond_nodes[RELATIVE_INDEX + i - 1]
-            .tval
-            .overflowing_add(cls(
+        n_cond_nodes[RELATIVE_INDEX + i].tval =
+            n_cond_nodes[RELATIVE_INDEX + i - 1].tval.wrapping_add(cls(
                 md5_values::md5_g(
                     n_cond_nodes[RELATIVE_INDEX + i - 1].tval,
                     n_cond_nodes[RELATIVE_INDEX + i - 2].tval,
                     n_cond_nodes[RELATIVE_INDEX + i - 3].tval,
                 )
-                .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].tval)
-                .0
-                .overflowing_add(m_prime_block[md5_values::MMAP[i] as usize])
-                .0
-                .overflowing_add(md5_values::TMAP[i])
-                .0,
+                .wrapping_add(n_cond_nodes[RELATIVE_INDEX + i - 4].tval)
+                .wrapping_add(m_prime_block[md5_values::MMAP[i] as usize])
+                .wrapping_add(md5_values::TMAP[i]),
                 md5_values::SMAP[i],
-            ))
-            .0;
+            ));
         if n_cond_nodes[RELATIVE_INDEX + i]
             .tval
-            .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + i].val)
-            .0
+            .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + i].val)
             != dt[i]
         {
             return i as i32;
@@ -762,41 +709,31 @@ fn check_diffs(
     }
 
     for i in 32..48 {
-        n_cond_nodes[RELATIVE_INDEX + i].val = n_cond_nodes[RELATIVE_INDEX + i - 1]
-            .val
-            .overflowing_add(cls(
+        n_cond_nodes[RELATIVE_INDEX + i].val =
+            n_cond_nodes[RELATIVE_INDEX + i - 1].val.wrapping_add(cls(
                 md5_values::md5_h(
                     n_cond_nodes[RELATIVE_INDEX + i - 1].val,
                     n_cond_nodes[RELATIVE_INDEX + i - 2].val,
                     n_cond_nodes[RELATIVE_INDEX + i - 3].val,
                 )
-                .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].val)
-                .0
-                .overflowing_add(m_block[md5_values::MMAP[i] as usize])
-                .0
-                .overflowing_add(md5_values::TMAP[i])
-                .0,
+                .wrapping_add(n_cond_nodes[RELATIVE_INDEX + i - 4].val)
+                .wrapping_add(m_block[md5_values::MMAP[i] as usize])
+                .wrapping_add(md5_values::TMAP[i]),
                 md5_values::SMAP[i],
-            ))
-            .0;
+            ));
 
-        n_cond_nodes[RELATIVE_INDEX + i].tval = n_cond_nodes[RELATIVE_INDEX + i - 1]
-            .tval
-            .overflowing_add(cls(
+        n_cond_nodes[RELATIVE_INDEX + i].tval =
+            n_cond_nodes[RELATIVE_INDEX + i - 1].tval.wrapping_add(cls(
                 md5_values::md5_h(
                     n_cond_nodes[RELATIVE_INDEX + i - 1].tval,
                     n_cond_nodes[RELATIVE_INDEX + i - 2].tval,
                     n_cond_nodes[RELATIVE_INDEX + i - 3].tval,
                 )
-                .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].tval)
-                .0
-                .overflowing_add(m_prime_block[md5_values::MMAP[i] as usize])
-                .0
-                .overflowing_add(md5_values::TMAP[i])
-                .0,
+                .wrapping_add(n_cond_nodes[RELATIVE_INDEX + i - 4].tval)
+                .wrapping_add(m_prime_block[md5_values::MMAP[i] as usize])
+                .wrapping_add(md5_values::TMAP[i]),
                 md5_values::SMAP[i],
-            ))
-            .0;
+            ));
 
         if i > 33
             && ((n_cond_nodes[RELATIVE_INDEX + i].tval ^ n_cond_nodes[RELATIVE_INDEX + i].val)
@@ -807,46 +744,35 @@ fn check_diffs(
     }
 
     for i in 48..60 {
-        n_cond_nodes[RELATIVE_INDEX + i].val = n_cond_nodes[RELATIVE_INDEX + i - 1]
-            .val
-            .overflowing_add(cls(
+        n_cond_nodes[RELATIVE_INDEX + i].val =
+            n_cond_nodes[RELATIVE_INDEX + i - 1].val.wrapping_add(cls(
                 md5_values::md5_i(
                     n_cond_nodes[RELATIVE_INDEX + i - 1].val,
                     n_cond_nodes[RELATIVE_INDEX + i - 2].val,
                     n_cond_nodes[RELATIVE_INDEX + i - 3].val,
                 )
-                .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].val)
-                .0
-                .overflowing_add(m_block[md5_values::MMAP[i] as usize])
-                .0
-                .overflowing_add(md5_values::TMAP[i])
-                .0,
+                .wrapping_add(n_cond_nodes[RELATIVE_INDEX + i - 4].val)
+                .wrapping_add(m_block[md5_values::MMAP[i] as usize])
+                .wrapping_add(md5_values::TMAP[i]),
                 md5_values::SMAP[i],
-            ))
-            .0;
+            ));
 
-        n_cond_nodes[RELATIVE_INDEX + i].tval = n_cond_nodes[RELATIVE_INDEX + i - 1]
-            .tval
-            .overflowing_add(cls(
+        n_cond_nodes[RELATIVE_INDEX + i].tval =
+            n_cond_nodes[RELATIVE_INDEX + i - 1].tval.wrapping_add(cls(
                 md5_values::md5_i(
                     n_cond_nodes[RELATIVE_INDEX + i - 1].tval,
                     n_cond_nodes[RELATIVE_INDEX + i - 2].tval,
                     n_cond_nodes[RELATIVE_INDEX + i - 3].tval,
                 )
-                .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].tval)
-                .0
-                .overflowing_add(m_prime_block[md5_values::MMAP[i] as usize])
-                .0
-                .overflowing_add(md5_values::TMAP[i])
-                .0,
+                .wrapping_add(n_cond_nodes[RELATIVE_INDEX + i - 4].tval)
+                .wrapping_add(m_prime_block[md5_values::MMAP[i] as usize])
+                .wrapping_add(md5_values::TMAP[i]),
                 md5_values::SMAP[i],
-            ))
-            .0;
+            ));
 
         if n_cond_nodes[RELATIVE_INDEX + i]
             .tval
-            .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + i].val)
-            .0
+            .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + i].val)
             != dt[i]
         {
             return i as i32;
@@ -854,75 +780,57 @@ fn check_diffs(
     }
 
     for i in 60..64 {
-        n_cond_nodes[RELATIVE_INDEX + i].val = n_cond_nodes[RELATIVE_INDEX + i - 1]
-            .val
-            .overflowing_add(cls(
+        n_cond_nodes[RELATIVE_INDEX + i].val =
+            n_cond_nodes[RELATIVE_INDEX + i - 1].val.wrapping_add(cls(
                 md5_values::md5_i(
                     n_cond_nodes[RELATIVE_INDEX + i - 1].val,
                     n_cond_nodes[RELATIVE_INDEX + i - 2].val,
                     n_cond_nodes[RELATIVE_INDEX + i - 3].val,
                 )
-                .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].val)
-                .0
-                .overflowing_add(m_block[md5_values::MMAP[i] as usize])
-                .0
-                .overflowing_add(md5_values::TMAP[i])
-                .0,
+                .wrapping_add(n_cond_nodes[RELATIVE_INDEX + i - 4].val)
+                .wrapping_add(m_block[md5_values::MMAP[i] as usize])
+                .wrapping_add(md5_values::TMAP[i]),
                 md5_values::SMAP[i],
-            ))
-            .0;
+            ));
 
-        n_cond_nodes[RELATIVE_INDEX + i].tval = n_cond_nodes[RELATIVE_INDEX + i - 1]
-            .tval
-            .overflowing_add(cls(
+        n_cond_nodes[RELATIVE_INDEX + i].tval =
+            n_cond_nodes[RELATIVE_INDEX + i - 1].tval.wrapping_add(cls(
                 md5_values::md5_i(
                     n_cond_nodes[RELATIVE_INDEX + i - 1].tval,
                     n_cond_nodes[RELATIVE_INDEX + i - 2].tval,
                     n_cond_nodes[RELATIVE_INDEX + i - 3].tval,
                 )
-                .overflowing_add(n_cond_nodes[RELATIVE_INDEX + i - 4].tval)
-                .0
-                .overflowing_add(m_prime_block[md5_values::MMAP[i] as usize])
-                .0
-                .overflowing_add(md5_values::TMAP[i])
-                .0,
+                .wrapping_add(n_cond_nodes[RELATIVE_INDEX + i - 4].tval)
+                .wrapping_add(m_prime_block[md5_values::MMAP[i] as usize])
+                .wrapping_add(md5_values::TMAP[i]),
                 md5_values::SMAP[i],
-            ))
-            .0;
+            ));
     }
 
     n_cond_nodes[RELATIVE_INDEX + 68].val = n_cond_nodes[RELATIVE_INDEX + 60]
         .val
-        .overflowing_add(n_cond_nodes[RELATIVE_INDEX - 4].val)
-        .0;
+        .wrapping_add(n_cond_nodes[RELATIVE_INDEX - 4].val);
     n_cond_nodes[RELATIVE_INDEX + 69].val = n_cond_nodes[RELATIVE_INDEX + 61]
         .val
-        .overflowing_add(n_cond_nodes[RELATIVE_INDEX - 3].val)
-        .0;
+        .wrapping_add(n_cond_nodes[RELATIVE_INDEX - 3].val);
     n_cond_nodes[RELATIVE_INDEX + 70].val = n_cond_nodes[RELATIVE_INDEX + 62]
         .val
-        .overflowing_add(n_cond_nodes[RELATIVE_INDEX - 2].val)
-        .0;
+        .wrapping_add(n_cond_nodes[RELATIVE_INDEX - 2].val);
     n_cond_nodes[RELATIVE_INDEX + 71].val = n_cond_nodes[RELATIVE_INDEX + 63]
         .val
-        .overflowing_add(n_cond_nodes[RELATIVE_INDEX - 1].val)
-        .0;
+        .wrapping_add(n_cond_nodes[RELATIVE_INDEX - 1].val);
     n_cond_nodes[RELATIVE_INDEX + 68].tval = n_cond_nodes[RELATIVE_INDEX + 60]
         .tval
-        .overflowing_add(n_cond_nodes[RELATIVE_INDEX - 4].val)
-        .0;
+        .wrapping_add(n_cond_nodes[RELATIVE_INDEX - 4].val);
     n_cond_nodes[RELATIVE_INDEX + 69].tval = n_cond_nodes[RELATIVE_INDEX + 61]
         .tval
-        .overflowing_add(n_cond_nodes[RELATIVE_INDEX - 3].val)
-        .0;
+        .wrapping_add(n_cond_nodes[RELATIVE_INDEX - 3].val);
     n_cond_nodes[RELATIVE_INDEX + 70].tval = n_cond_nodes[RELATIVE_INDEX + 62]
         .tval
-        .overflowing_add(n_cond_nodes[RELATIVE_INDEX - 2].val)
-        .0;
+        .wrapping_add(n_cond_nodes[RELATIVE_INDEX - 2].val);
     n_cond_nodes[RELATIVE_INDEX + 71].tval = n_cond_nodes[RELATIVE_INDEX + 63]
         .tval
-        .overflowing_add(n_cond_nodes[RELATIVE_INDEX - 1].val)
-        .0;
+        .wrapping_add(n_cond_nodes[RELATIVE_INDEX - 1].val);
 
     for i in 69..72 {
         if fcheck_cond(i, n_cond_nodes) != 0 {
@@ -930,8 +838,7 @@ fn check_diffs(
         }
         if n_cond_nodes[RELATIVE_INDEX + i as usize]
             .tval
-            .overflowing_sub(n_cond_nodes[RELATIVE_INDEX + i as usize].val)
-            .0
+            .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + i as usize].val)
             != dt[i as usize - 4]
         {
             return i as i32;
