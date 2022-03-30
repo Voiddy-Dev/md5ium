@@ -704,7 +704,7 @@ fn round2_check_diffs(
 fn round3_check_diffs(
     m_block: &mut [u32; 32],
     m_prime_block: &mut [u32; 16],
-    n_cond_nodes: &mut [Node; 76]
+    n_cond_nodes: &mut [Node; 76],
 ) -> i32 {
     for i in 32..48 {
         n_cond_nodes[RELATIVE_INDEX + i].val =
@@ -791,7 +791,7 @@ fn check_diffs(
     m_block: &mut [u32; 32],
     n_cond_nodes: &mut [Node; 76],
     index: i32,
-    dt: [u32; 68]
+    dt: [u32; 68],
 ) -> i32 {
     let mut m_prime_block: [u32; 16] = [0; 16];
     m_prime_block.copy_from_slice(&m_block[..16]);

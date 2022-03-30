@@ -1,9 +1,13 @@
 use std::fs::File;
 use std::io::Write;
+use std::process;
+use std::thread;
 use std::time::SystemTime;
 
 mod block_1;
 mod block_2;
+
+const NTHREADS: u32 = 10;
 
 fn calculate_m_and_mprime(init_vector: [u32; 4]) -> ([u32; 4], [u32; 32], [u32; 32]) {
     println!(
@@ -43,25 +47,32 @@ fn main() {
     println!("---==[md5ium]==---");
     let default_iv: [u32; 4] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476];
 
-    // Converting the blocks to the proper format
-    let mut output_file_1: Vec<u8> = Vec::new();
-    let mut output_file_2: Vec<u8> = Vec::new();
+    let mut children_thread = vec![];
 
-    // First Iteration
-    let cv_two_blocks = calculate_m_and_mprime(default_iv);
-    add_to_output(cv_two_blocks.1, &mut output_file_1);
-    add_to_output(cv_two_blocks.2, &mut output_file_2);
+    for _ in 0..NTHREADS {
+        children_thread.push(thread::spawn(move || {
+            let cv_two_blocks = calculate_m_and_mprime(default_iv);
 
-    // for _ in 0..2 {
-    //     cv_two_blocks = calculate_m_and_mprime(cv_two_blocks.0);
-    //     add_to_output(cv_two_blocks.1, &mut output_file_1);
-    //     add_to_output(cv_two_blocks.2, &mut output_file_2);
-    // }
+            // Converting the blocks to the proper format
+            let mut output_file_1: Vec<u8> = Vec::new();
+            let mut output_file_2: Vec<u8> = Vec::new();
 
-    assert_ne!(output_file_1, output_file_2);
-    // Writing the blocks to a file
-    let mut f1 = File::create("b1.bin").unwrap();
-    f1.write_all(output_file_1.as_slice()).unwrap();
-    let mut f2 = File::create("b2.bin").unwrap();
-    f2.write_all(output_file_2.as_slice()).unwrap();
+            add_to_output(cv_two_blocks.1, &mut output_file_1);
+            add_to_output(cv_two_blocks.2, &mut output_file_2);
+
+            assert_ne!(output_file_1, output_file_2);
+            // Writing the blocks to a file
+            let mut f1 = File::create("b1.bin").unwrap();
+            f1.write_all(output_file_1.as_slice()).unwrap();
+            let mut f2 = File::create("b2.bin").unwrap();
+            f2.write_all(output_file_2.as_slice()).unwrap();
+
+            process::exit(0); // exit before waiting for the other threads to finish
+        }));
+    }
+
+    for thread in children_thread {
+        // this should never happen because of the exit
+        let _ = thread.join();
+    }
 }
