@@ -7,6 +7,15 @@ use std::io::{BufRead, BufReader};
 mod md5_values;
 
 const RELATIVE_INDEX: usize = 4;
+const DIFFERENCES: [u32; 68] = [
+    0x0, 0x0, 0x0, 0x0, 0xffffffc0, 0x807fffc0, 0xf87fffbf, 0xff7d8001, 0x7fffffc1, 0x80001000,
+    0xc0000000, 0x7fffdf80, 0x81000000, 0x80000000, 0x7fff8008, 0x60000000, 0x80000000, 0x80000000,
+    0x80020000, 0x80000000, 0x80000000, 0x80000000, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
+    0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
+    0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000,
+    0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x2000000, 0x82000000, 0x82000000,
+    0x80000000, 0x82000000, 0x82000000, 0x82000000,
+];
 
 #[inline]
 fn cls(x: u32, s: i32) -> u32 {
@@ -164,81 +173,8 @@ fn build_bitfield(n_cond_nodes: &mut [Node; 76]) {
     }
 }
 
-fn construct_diff_table() -> [u32; 68] {
-    let mut diff_table: [u32; 68] = [0; 68];
-    diff_table[0] = 0;
-    diff_table[1] = 0;
-    diff_table[2] = 0;
-    diff_table[3] = 0;
-    diff_table[4] = addsub_bit(0, 6, -1);
-    diff_table[5] = addsub_bit(0, 6, -1);
-    diff_table[5] = addsub_bit(diff_table[5], 23, 1);
-    diff_table[5] = addsub_bit(diff_table[5], 31, 1);
-    diff_table[6] = addsub_bit(0, 6, -1);
-    diff_table[6] = addsub_bit(diff_table[6], 23, 1);
-    diff_table[6] -= 1;
-    diff_table[6] = diff_table[6].wrapping_sub(addsub_bit(0, 27, 1));
-    diff_table[7] += 1;
-    diff_table[7] = diff_table[7].wrapping_sub(addsub_bit(0, 15, 1));
-    diff_table[7] = diff_table[7].wrapping_sub(addsub_bit(0, 17, 1));
-    diff_table[7] = diff_table[7].wrapping_sub(addsub_bit(0, 23, 1));
-    diff_table[8] += 1;
-    diff_table[8] = diff_table[8].wrapping_sub(addsub_bit(0, 6, 1));
-    diff_table[8] = diff_table[8].wrapping_add(addsub_bit(0, 31, 1));
-    diff_table[9] += addsub_bit(0, 12, 1);
-    diff_table[9] += addsub_bit(0, 31, 1);
-    diff_table[10] += addsub_bit(0, 31, 1);
-    diff_table[10] += addsub_bit(0, 30, 1);
-    diff_table[11] += addsub_bit(0, 31, 1);
-    diff_table[11] -= addsub_bit(0, 7, 1);
-    diff_table[11] -= addsub_bit(0, 13, 1);
-    diff_table[12] += addsub_bit(0, 24, 1);
-    diff_table[12] += addsub_bit(0, 31, 1);
-    diff_table[13] += addsub_bit(0, 31, 1);
-    diff_table[14] += addsub_bit(0, 31, 1);
-    diff_table[14] += addsub_bit(0, 3, 1);
-    diff_table[14] -= addsub_bit(0, 15, 1);
-    diff_table[15] += addsub_bit(0, 31, 1);
-    diff_table[15] -= addsub_bit(0, 29, 1);
-    diff_table[16] += addsub_bit(0, 31, 1);
-    diff_table[17] += addsub_bit(0, 31, 1);
-    diff_table[18] += addsub_bit(0, 31, 1);
-    diff_table[18] += addsub_bit(0, 17, 1);
-    diff_table[19] += addsub_bit(0, 31, 1);
-    diff_table[20] += addsub_bit(0, 31, 1);
-    diff_table[21] += addsub_bit(0, 31, 1);
-    diff_table[48] += addsub_bit(0, 31, 1);
-    diff_table[49] += addsub_bit(0, 31, -1);
-    diff_table[50] += addsub_bit(0, 31, 1);
-    diff_table[51] += addsub_bit(0, 31, -1);
-    diff_table[52] += addsub_bit(0, 31, -1);
-    diff_table[53] += addsub_bit(0, 31, -1);
-    diff_table[54] += addsub_bit(0, 31, -1);
-    diff_table[55] += addsub_bit(0, 31, -1);
-    diff_table[56] += addsub_bit(0, 31, -1);
-    diff_table[57] += addsub_bit(0, 31, -1);
-    diff_table[58] += addsub_bit(0, 31, 1);
-    diff_table[59] += addsub_bit(0, 31, 1);
-    diff_table[60] += addsub_bit(0, 31, 1);
-    diff_table[61] += addsub_bit(0, 32, 1);
-    diff_table[61] += addsub_bit(0, 25, 1);
-    diff_table[62] += addsub_bit(0, 31, 1);
-    diff_table[62] += addsub_bit(0, 25, 1);
-    diff_table[63] += addsub_bit(0, 31, -1);
-    diff_table[63] += addsub_bit(0, 25, 1);
-    diff_table[64] += addsub_bit(0, 31, 1);
-    diff_table[65] += addsub_bit(0, 31, 1);
-    diff_table[65] += addsub_bit(0, 25, 1);
-    diff_table[66] += addsub_bit(0, 31, 1);
-    diff_table[66] += addsub_bit(0, 25, 1);
-    diff_table[67] += addsub_bit(0, 31, -1);
-    diff_table[67] += addsub_bit(0, 25, 1);
-
-    diff_table
-}
-
 /// Function to satisfy first round differentials
-fn first_round(m_block: &mut [u32; 32], n_cond_nodes: &mut [Node; 76], diff_table: [u32; 68]) {
+fn first_round(m_block: &mut [u32; 32], n_cond_nodes: &mut [Node; 76]) {
     loop {
         let mut breakout = true;
         // Go through the first round values
@@ -291,7 +227,7 @@ fn first_round(m_block: &mut [u32; 32], n_cond_nodes: &mut [Node; 76], diff_tabl
             if n_cond_nodes[RELATIVE_INDEX + i]
                 .tval
                 .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + i].val)
-                != diff_table[i]
+                != DIFFERENCES[i]
             {
                 // differential is not satisfied
                 new_rand_mblock(m_block);
@@ -312,36 +248,6 @@ fn first_round(m_block: &mut [u32; 32], n_cond_nodes: &mut [Node; 76], diff_tabl
         if breakout {
             break;
         }
-        // m_block[4] = addsub_bit(m_block[4], 31, 1);
-        // m_block[11] = addsub_bit(m_block[11], 15, 1);
-        // m_block[14] = addsub_bit(m_block[14], 31, 1);
-
-        // for i in 0..16 {
-        //     n_cond_nodes[RELATIVE_INDEX + i].tval =
-        //         n_cond_nodes[RELATIVE_INDEX + i - 1].tval.wrapping_add(cls(
-        //             md5_values::md5_f(
-        //                 n_cond_nodes[RELATIVE_INDEX + i - 1].tval,
-        //                 n_cond_nodes[RELATIVE_INDEX + i - 2].tval,
-        //                 n_cond_nodes[RELATIVE_INDEX + i - 3].tval,
-        //             )
-        //             .wrapping_add(n_cond_nodes[RELATIVE_INDEX + i - 4].tval)
-        //             .wrapping_add(m_block[i])
-        //             .wrapping_add(md5_values::TMAP[i]),
-        //             md5_values::SMAP[i],
-        //         ));
-
-        //     if n_cond_nodes[RELATIVE_INDEX + i]
-        //         .tval
-        //         .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + i].val)
-        //         != diff_table[i]
-        //     {
-        //         flag = 0;
-        //         new_rand_mblock(m_block);
-        //     }
-        // }
-        // m_block[4] = addsub_bit(m_block[4], 31, -1);
-        // m_block[11] = addsub_bit(m_block[11], 15, -1);
-        // m_block[14] = addsub_bit(m_block[14], 31, -1);
     }
 }
 
@@ -572,7 +478,6 @@ fn first_block(
     init_vector: [u32; 4],
     m_block: &mut [u32; 32],
     n_cond_nodes: &mut [Node; 76],
-    dt: [u32; 68],
     g_n19: &mut u32,
 ) {
     n_cond_nodes[RELATIVE_INDEX + 64].val = init_vector[0];
@@ -591,25 +496,25 @@ fn first_block(
     n_cond_nodes[RELATIVE_INDEX - 1].val = init_vector[1];
     n_cond_nodes[RELATIVE_INDEX - 1].tval = init_vector[1];
 
-    first_round(m_block, n_cond_nodes, dt);
+    first_round(m_block, n_cond_nodes);
 
     while klima1_3(m_block, n_cond_nodes) {
         new_rand_mblock(m_block);
-        first_round(m_block, n_cond_nodes, dt);
+        first_round(m_block, n_cond_nodes);
     }
     klima4_9(m_block, n_cond_nodes, g_n19);
-    let mut stepno = check_diffs(m_block, n_cond_nodes, 20, dt);
+    let mut stepno = check_diffs(m_block, n_cond_nodes, 20);
 
     while stepno >= 0 {
         if *g_n19 >= 0x80000000 {
             *g_n19 = 0;
             while klima1_3(m_block, n_cond_nodes) {
                 new_rand_mblock(m_block);
-                first_round(m_block, n_cond_nodes, dt);
+                first_round(m_block, n_cond_nodes);
             }
         }
         klima4_9(m_block, n_cond_nodes, g_n19);
-        stepno = check_diffs(m_block, n_cond_nodes, 20, dt);
+        stepno = check_diffs(m_block, n_cond_nodes, 20);
     }
 }
 
@@ -617,7 +522,6 @@ fn round1_check_diffs(
     m_block: &mut [u32; 32],
     m_prime_block: &mut [u32; 16],
     n_cond_nodes: &mut [Node; 76],
-    dt: [u32; 68],
 ) -> i32 {
     for i in 0..16 {
         n_cond_nodes[RELATIVE_INDEX + i].val =
@@ -649,7 +553,7 @@ fn round1_check_diffs(
         if n_cond_nodes[RELATIVE_INDEX + i]
             .tval
             .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + i].val)
-            != dt[i]
+            != DIFFERENCES[i]
         {
             return i as i32;
         }
@@ -662,7 +566,6 @@ fn round2_check_diffs(
     m_prime_block: &mut [u32; 16],
     n_cond_nodes: &mut [Node; 76],
     ind: usize,
-    dt: [u32; 68],
 ) -> i32 {
     for i in ind..32 {
         n_cond_nodes[RELATIVE_INDEX + i].val =
@@ -693,7 +596,7 @@ fn round2_check_diffs(
         if n_cond_nodes[RELATIVE_INDEX + i]
             .tval
             .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + i].val)
-            != dt[i]
+            != DIFFERENCES[i]
         {
             return i as i32;
         }
@@ -747,7 +650,6 @@ fn round4_check_diffs(
     m_block: &mut [u32; 32],
     m_prime_block: &mut [u32; 16],
     n_cond_nodes: &mut [Node; 76],
-    dt: [u32; 68],
 ) -> i32 {
     for i in 48..60 {
         n_cond_nodes[RELATIVE_INDEX + i].val =
@@ -779,7 +681,7 @@ fn round4_check_diffs(
         if n_cond_nodes[RELATIVE_INDEX + i]
             .tval
             .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + i].val)
-            != dt[i]
+            != DIFFERENCES[i]
         {
             return i as i32;
         }
@@ -787,12 +689,7 @@ fn round4_check_diffs(
     return 0x1337;
 }
 
-fn check_diffs(
-    m_block: &mut [u32; 32],
-    n_cond_nodes: &mut [Node; 76],
-    index: i32,
-    dt: [u32; 68],
-) -> i32 {
+fn check_diffs(m_block: &mut [u32; 32], n_cond_nodes: &mut [Node; 76], index: i32) -> i32 {
     let mut m_prime_block: [u32; 16] = [0; 16];
     m_prime_block.copy_from_slice(&m_block[..16]);
 
@@ -803,20 +700,21 @@ fn check_diffs(
     let mut local_index: usize = index as usize;
     if local_index == 20 {
         for i in 15..20 {
-            n_cond_nodes[RELATIVE_INDEX + i].tval =
-                n_cond_nodes[RELATIVE_INDEX + i].val.wrapping_add(dt[i]);
+            n_cond_nodes[RELATIVE_INDEX + i].tval = n_cond_nodes[RELATIVE_INDEX + i]
+                .val
+                .wrapping_add(DIFFERENCES[i]);
         }
     }
 
     if local_index != 20 {
-        let ret = round1_check_diffs(m_block, &mut m_prime_block, n_cond_nodes, dt);
+        let ret = round1_check_diffs(m_block, &mut m_prime_block, n_cond_nodes);
         if ret != 0x1337 {
             return ret;
         }
         local_index = 16;
     }
 
-    let ret = round2_check_diffs(m_block, &mut m_prime_block, n_cond_nodes, local_index, dt);
+    let ret = round2_check_diffs(m_block, &mut m_prime_block, n_cond_nodes, local_index);
     if ret != 0x1337 {
         return ret;
     }
@@ -826,7 +724,7 @@ fn check_diffs(
         return ret;
     }
 
-    let ret = round4_check_diffs(m_block, &mut m_prime_block, n_cond_nodes, dt);
+    let ret = round4_check_diffs(m_block, &mut m_prime_block, n_cond_nodes);
     if ret != 0x1337 {
         return ret;
     }
@@ -891,7 +789,7 @@ fn check_diffs(
         if n_cond_nodes[RELATIVE_INDEX + i as usize]
             .tval
             .wrapping_sub(n_cond_nodes[RELATIVE_INDEX + i as usize].val)
-            != dt[i as usize - 4]
+            != DIFFERENCES[i as usize - 4]
         {
             return i as i32;
         }
@@ -906,14 +804,14 @@ pub fn block1(init_vector: [u32; 4]) -> ([u32; 4], [u32; 32], [u32; 32]) {
     // Building condition list and bitfield
     let mut re = build_condition_list("./data/md5cond_1.txt".to_string());
     build_bitfield(&mut re);
-    let dt = construct_diff_table();
+
     // Initial random message
     let mut m_block: [u32; 32] = [0; 32];
     new_rand_mblock(&mut m_block); // Randomize
 
-    first_block(init_vector, &mut m_block, &mut re, dt, &mut g_n19);
-    while check_diffs(&mut m_block, &mut re, 0, dt) > -1 {
-        first_block(init_vector, &mut m_block, &mut re, dt, &mut g_n19);
+    first_block(init_vector, &mut m_block, &mut re, &mut g_n19);
+    while check_diffs(&mut m_block, &mut re, 0) > -1 {
+        first_block(init_vector, &mut m_block, &mut re, &mut g_n19);
     }
     println!(
         "Block1ChainingValue: {:x}{:x}{:x}{:x}",

@@ -14,16 +14,8 @@ fn calculate_m_and_mprime(init_vector: [u32; 4]) -> ([u32; 4], [u32; 32], [u32; 
         "Starting new computation - IV: 0x{:x} 0x{:x} 0x{:x} 0x{:x}",
         init_vector[0], init_vector[1], init_vector[2], init_vector[3]
     );
-    let start = SystemTime::now();
     let mut cv_and_blocks1: ([u32; 4], [u32; 32], [u32; 32]) = block_1::block1(init_vector);
     let cv_and_blocks2: ([u32; 4], [u32; 16], [u32; 16]) = block_2::block2(cv_and_blocks1.0);
-
-    let end = SystemTime::now();
-    let elapsed = end.duration_since(start);
-    println!(
-        "\n\tExecution time: {} secs\n",
-        elapsed.unwrap_or_default().as_secs()
-    );
 
     for i in 16..32 {
         cv_and_blocks1.1[i] = cv_and_blocks2.1[i - 16];
@@ -48,6 +40,7 @@ fn main() {
     let default_iv: [u32; 4] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476];
 
     let mut children_thread = vec![];
+    let start = SystemTime::now();
 
     for _ in 0..NTHREADS {
         children_thread.push(thread::spawn(move || {
@@ -66,6 +59,13 @@ fn main() {
             f1.write_all(output_file_1.as_slice()).unwrap();
             let mut f2 = File::create("b2.bin").unwrap();
             f2.write_all(output_file_2.as_slice()).unwrap();
+
+            let end = SystemTime::now();
+            let elapsed = end.duration_since(start);
+            println!(
+                "\n\tExecution time: {} secs\n",
+                elapsed.unwrap_or_default().as_secs()
+            );
 
             process::exit(0); // exit before waiting for the other threads to finish
         }));
