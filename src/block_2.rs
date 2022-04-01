@@ -18,7 +18,7 @@ const DIFFERENCES: [u32; 64] = [
 
 // Helper functions
 #[inline]
-fn cover_func(b: u32, c: u32, d: u32, i: usize) -> u32 {
+fn get_md5_round_func(b: u32, c: u32, d: u32, i: usize) -> u32 {
     if i < 16 {
         return md5_values::md5_f(b, c, d);
     }
@@ -32,8 +32,13 @@ fn cover_func(b: u32, c: u32, d: u32, i: usize) -> u32 {
 }
 
 #[inline]
+fn shifting(bit: u32) -> u32 {
+    return 1 << (bit - 1);
+}
+
+#[inline]
 fn phi(q_cond_nodes: &mut [u32; 68], i: usize) -> u32 {
-    return cover_func(
+    return get_md5_round_func(
         q_cond_nodes[i - 1],
         q_cond_nodes[i - 2],
         q_cond_nodes[i - 3],
@@ -62,72 +67,87 @@ fn build_condition_list_block_2(filename: String) -> [[u32; 3]; 309] {
 }
 
 #[allow(unused_assignments)]
-fn satisfy_stationary(q_cond_nodes: &mut [u32; 68], type1: i32, cond: [[u32; 3]; 309]) {
-    let mut bit;
-    let mut type_2;
-    let k;
-    let m_block;
+fn modif_for_cond(q_cond_nodes: &mut [u32; 68], q_index: i32, cond: [[u32; 3]; 309]) {
+    let start;
+    let end;
 
-    if type1 == 0 {
-        m_block = 145;
-        k = 211;
-    } else if type1 == 2 {
-        m_block = 0;
-        k = 52;
-    } else {
-        m_block = 0;
-        k = 274;
+    match q_index {
+        0 => {
+            //Q[7-10]
+            start = 145;
+            end = 211;
+        }
+        2 => {
+            //Q[0,1]
+            start = 0;
+            end = 52;
+        }
+        _ => {
+            //Q[0-15]
+            start = 0;
+            end = 274;
+        }
     }
-    for mut i in m_block..k {
+    for mut i in start..end {
         let j = cond[i][0] + 4;
         let mut zero_bit: u32 = 0xffffffff;
         let mut one_bit: u32 = 0;
         while cond[i][0] == j - 4 {
-            bit = cond[i][1];
-            type_2 = cond[i][2];
-            if type_2 == 0 {
-                zero_bit = zero_bit & !(1 << (bit - 1));
-            } else if type_2 == 1 {
-                one_bit = one_bit | (1 << (bit - 1));
-            } else if type_2 == 2 {
-                if (q_cond_nodes[j as usize - 1] & (1 << (bit - 1))) != 0 {
-                    one_bit = one_bit | (1 << (bit - 1));
-                } else {
-                    zero_bit = zero_bit & !(1 << (bit - 1));
+            let bit = cond[i][1];
+            match cond[i][2] {
+                0 => {
+                    zero_bit &= !shifting(bit);
                 }
-            } else if type_2 == 3 {
-                if (q_cond_nodes[j as usize - 2] & (1 << (bit - 1))) != 0 {
-                    one_bit = one_bit | (1 << (bit - 1));
-                } else {
-                    zero_bit = zero_bit & !(1 << (bit - 1));
+                1 => {
+                    one_bit |= shifting(bit);
                 }
-            } else if type_2 == 4 {
-                if (q_cond_nodes[j as usize - 1] & (1 << (bit - 1))) == 0 {
-                    one_bit = one_bit | (1 << (bit - 1));
-                } else {
-                    zero_bit = zero_bit & !(1 << (bit - 1));
+                2 => {
+                    if (q_cond_nodes[j as usize - 1] & shifting(bit)) != 0 {
+                        one_bit |= shifting(bit);
+                    } else {
+                        zero_bit &= !shifting(bit);
+                    }
                 }
+                3 => {
+                    if (q_cond_nodes[j as usize - 2] & shifting(bit)) != 0 {
+                        one_bit |= shifting(bit);
+                    } else {
+                        zero_bit &= !shifting(bit);
+                    }
+                }
+                4 => {
+                    if (q_cond_nodes[j as usize - 1] & shifting(bit)) == 0 {
+                        one_bit |= shifting(bit);
+                    } else {
+                        zero_bit &= !shifting(bit);
+                    }
+                }
+                _ => {}
             }
             i += 1;
         }
         i -= 1;
-        q_cond_nodes[j as usize] = q_cond_nodes[j as usize] | one_bit;
-        q_cond_nodes[j as usize] = q_cond_nodes[j as usize] & zero_bit;
+        q_cond_nodes[j as usize] |= one_bit;
+        q_cond_nodes[j as usize] &= zero_bit;
     }
 }
 
 #[inline]
-fn md5_rr(var: u32, num: i32) -> u32 {
-    let temp: u32 = var >> num;
-    return (var << (32 - num)) | temp;
+fn md5_rr(x: u32, y: i32) -> u32 {
+    let first: u32 = x >> y;
+    return (x << (32 - y)) | first;
 }
 #[inline]
-fn md5_rl(var: u32, num: i32) -> u32 {
-    let temp: u32 = var << num;
-    return (var >> (32 - num)) | temp;
+fn md5_rl(x: u32, y: i32) -> u32 {
+    let first: u32 = x << y;
+    return (x >> (32 - y)) | first;
 }
 
-fn findx(q_cond_nodes: &mut [u32; 68], m_block: &mut [u32; 16], m_prime_block: &mut [u32; 16]) {
+fn recalc_0_15(
+    q_cond_nodes: &mut [u32; 68],
+    m_block: &mut [u32; 16],
+    m_prime_block: &mut [u32; 16],
+) {
     for i in 4..20 {
         m_block[i - 4] = md5_rr(
             q_cond_nodes[i].wrapping_sub(q_cond_nodes[i - 1]),
@@ -143,6 +163,7 @@ fn findx(q_cond_nodes: &mut [u32; 68], m_block: &mut [u32; 16], m_prime_block: &
     m_prime_block[14] = m_prime_block[14].wrapping_sub(0x80000000);
 }
 
+// 20 first steps of md5
 fn md5step20(
     m_block: &mut [u32; 16],
     vals: &mut [u32; 68],
@@ -153,10 +174,10 @@ fn md5step20(
     let mut b = vals[3];
     let mut c = vals[2];
     let mut d = vals[1];
-    let mut t;
-    let mut t1;
+    let mut first;
+    let mut second;
     for j in 0..16 {
-        t = a.wrapping_add(
+        first = a.wrapping_add(
             ((b & c) | ((!b) & d))
                 .wrapping_add(m_block[md5_values::MMAP[j] as usize])
                 .wrapping_add(md5_values::TMAP[j]),
@@ -165,12 +186,12 @@ fn md5step20(
         d = c;
         c = b;
         a = temp;
-        t1 = t >> (32 - md5_values::SMAP[j]);
-        b = b.wrapping_add((t << md5_values::SMAP[j]).wrapping_add(t1));
+        second = first >> (32 - md5_values::SMAP[j]);
+        b = b.wrapping_add((first << md5_values::SMAP[j]).wrapping_add(second));
         vals[j + 4] = b;
     }
     for j in 16..21 {
-        t = a
+        first = a
             .wrapping_add((b & d) | (c & !d))
             .wrapping_add(m_block[md5_values::MMAP[j] as usize])
             .wrapping_add(md5_values::TMAP[j]);
@@ -178,18 +199,16 @@ fn md5step20(
         d = c;
         c = b;
         a = temp;
-        t1 = t >> (32 - md5_values::SMAP[j]);
-        b = b.wrapping_add((t << md5_values::SMAP[j]).wrapping_add(t1));
+        second = first >> (32 - md5_values::SMAP[j]);
+        b = b.wrapping_add((first << md5_values::SMAP[j]).wrapping_add(second));
         vals[j + 4] = b;
     }
     a = vals1[0];
     b = vals1[3];
     c = vals1[2];
     d = vals1[1];
-    // t;
-    // t1;
     for j in 0..16 {
-        t = a
+        first = a
             .wrapping_add((b & c) | ((!b) & d))
             .wrapping_add(m_prime_block[md5_values::MMAP[j] as usize])
             .wrapping_add(md5_values::TMAP[j]);
@@ -197,12 +216,12 @@ fn md5step20(
         d = c;
         c = b;
         a = temp;
-        t1 = t >> (32 - md5_values::SMAP[j]);
-        b = b.wrapping_add((t << md5_values::SMAP[j]) + t1);
+        second = first >> (32 - md5_values::SMAP[j]);
+        b = b.wrapping_add((first << md5_values::SMAP[j]) + second);
         vals1[j + 4] = b;
     }
     for j in 16..21 {
-        t = a
+        first = a
             .wrapping_add((b & d) | (c & !d))
             .wrapping_add(m_prime_block[md5_values::MMAP[j] as usize])
             .wrapping_add(md5_values::TMAP[j]);
@@ -210,53 +229,61 @@ fn md5step20(
         d = c;
         c = b;
         a = temp;
-        t1 = t >> (32 - md5_values::SMAP[j]);
-        b = b.wrapping_add((t << md5_values::SMAP[j]).wrapping_add(t1));
+        second = first >> (32 - md5_values::SMAP[j]);
+        b = b.wrapping_add((first << md5_values::SMAP[j]).wrapping_add(second));
         vals1[j + 4] = b;
     }
 }
 
 #[allow(unused_assignments)]
-fn check_stationary(q_cond_nodes: [u32; 68], m_block: i32, k: i32, cond: [[u32; 3]; 309]) -> bool {
-    let mut bit;
-    let mut type_2;
-    for mut i in m_block..k {
+fn verify_conditions(q_cond_nodes: [u32; 68], start: i32, end: i32, cond: [[u32; 3]; 309]) -> bool {
+    // Goes through every condition and verifies if they are all satisfied
+    for mut i in start..end {
         let j = cond[i as usize][0] + 4;
         let mut zero_bit: u32 = 0xffffffff;
         let mut one_bit: u32 = 0;
         while cond[i as usize][0] == j - 4 {
-            bit = cond[i as usize][1];
-            type_2 = cond[i as usize][2];
-            if type_2 == 0 {
-                zero_bit = zero_bit & !(1 << (bit - 1));
-            } else if type_2 == 1 {
-                one_bit = one_bit | (1 << (bit - 1));
-            } else if type_2 == 2 {
-                if (q_cond_nodes[j as usize - 1] & (1 << (bit - 1))) != 0 {
-                    one_bit = one_bit | (1 << (bit - 1));
-                } else {
-                    zero_bit = zero_bit & !(1 << (bit - 1));
+            // " y is the bit within the step value
+            //   that the condition is placed on    "
+            let bit = cond[i as usize][1];
+            match cond[i as usize][2] {
+                // match on condition type
+                0 => {
+                    zero_bit &= !shifting(bit);
                 }
-            } else if type_2 == 3 {
-                if (q_cond_nodes[j as usize - 2] & (1 << (bit - 1))) != 0 {
-                    one_bit = one_bit | (1 << (bit - 1));
-                } else {
-                    zero_bit = zero_bit & !(1 << (bit - 1));
+                1 => {
+                    one_bit |= shifting(bit);
                 }
-            } else if type_2 == 4 {
-                if (q_cond_nodes[j as usize - 1] & (1 << (bit - 1))) == 0 {
-                    one_bit = one_bit | (1 << (bit - 1));
-                } else {
-                    zero_bit = zero_bit & !(1 << (bit - 1));
+                2 => {
+                    if (q_cond_nodes[j as usize - 1] & shifting(bit)) != 0 {
+                        one_bit |= shifting(bit);
+                    } else {
+                        zero_bit &= !shifting(bit);
+                    }
                 }
+                3 => {
+                    if (q_cond_nodes[j as usize - 2] & shifting(bit)) != 0 {
+                        one_bit |= shifting(bit);
+                    } else {
+                        zero_bit &= !shifting(bit);
+                    }
+                }
+                4 => {
+                    if (q_cond_nodes[j as usize - 1] & shifting(bit)) == 0 {
+                        one_bit |= shifting(bit);
+                    } else {
+                        zero_bit &= !shifting(bit);
+                    }
+                }
+                _ => {}
             }
             i += 1;
         }
         i -= 1;
-        if q_cond_nodes[j as usize] != (q_cond_nodes[j as usize] | one_bit) {
-            return false;
-        }
-        if q_cond_nodes[j as usize] != (q_cond_nodes[j as usize] & zero_bit) {
+
+        if (q_cond_nodes[j as usize] != (q_cond_nodes[j as usize] | one_bit))
+            || (q_cond_nodes[j as usize] != (q_cond_nodes[j as usize] & zero_bit))
+        {
             return false;
         }
     }
@@ -281,20 +308,18 @@ pub fn block2(chaining_value: [u32; 4]) -> ([u32; 4], [u32; 16], [u32; 16]) {
 
     let cond: [[u32; 3]; 309] = build_condition_list_block_2("./data/md5cond_2.txt".to_string());
 
-    let mut msg_found = false;
-    while !msg_found {
-        let mut c = true;
-
+    loop {
         let mut m_block: [u32; 16] = [0; 16];
         let mut m_prime_block: [u32; 16] = [0; 16];
-        while c {
-            let mut b = true;
-            while b {
+        loop {
+            while !((q_cond_nodes[19] ^ q_prime[19]) == 0xa0000000
+                && verify_conditions(q_cond_nodes, 0, 274, cond))
+            {
                 for i in 4..20 {
                     q_cond_nodes[i] = rng.gen();
                 }
-                satisfy_stationary(&mut q_cond_nodes, 1, cond);
-                findx(&mut q_cond_nodes, &mut m_block, &mut m_prime_block);
+                modif_for_cond(&mut q_cond_nodes, 1, cond);
+                recalc_0_15(&mut q_cond_nodes, &mut m_block, &mut m_prime_block);
                 if ((m_block[4] | m_block[14]) & 0x80000000) != 0 && (m_block[11] & 0x8000) != 0 {
                     md5step20(
                         &mut m_block,
@@ -302,44 +327,35 @@ pub fn block2(chaining_value: [u32; 4]) -> ([u32; 4], [u32; 16], [u32; 16]) {
                         &mut m_prime_block,
                         &mut q_prime,
                     );
-                    if (q_cond_nodes[19] ^ q_prime[19]) == 0xa0000000 {
-                        if check_stationary(q_cond_nodes, 0, 274, cond) {
-                            b = false;
-                        }
-                    }
                 }
             }
-
-            b = true;
-            let mut number: i32 = 0;
-            while b {
-                number += 1;
-
+            let mut count = 0;
+            while !(((q_cond_nodes[19] ^ q_prime[19]) == 0xa0000000)
+                && ((q_cond_nodes[24] ^ q_prime[24]) == 0x80000000)
+                && verify_conditions(q_cond_nodes, 0, 286, cond))
+            {
                 q_cond_nodes[5] = rng.gen();
                 q_cond_nodes[4] = rng.gen();
-                satisfy_stationary(&mut q_cond_nodes, 2, cond);
-                findx(&mut q_cond_nodes, &mut m_block, &mut m_prime_block);
+
+                modif_for_cond(&mut q_cond_nodes, 2, cond);
+                recalc_0_15(&mut q_cond_nodes, &mut m_block, &mut m_prime_block);
                 md5step20(
                     &mut m_block,
                     &mut q_cond_nodes,
                     &mut m_prime_block,
                     &mut q_prime,
                 );
-                if number == 0x10000 {
-                    b = false;
+                count += 1;
+                if count > 0x10000 {
+                    break;
                 }
-
-                if ((q_cond_nodes[19] ^ q_prime[19]) == 0xa0000000)
-                    && ((q_cond_nodes[24] ^ q_prime[24]) == 0x80000000)
-                    && check_stationary(q_cond_nodes, 0, 286, cond)
-                {
-                    c = false;
-                    b = false;
-                }
+            }
+            if count > 0x10000 {
+                break;
             }
         }
 
-        msg_found = multi_msg_2(
+        let msg_found = multi_msg(
             &mut m_block,
             &mut m_prime_block,
             &mut q_cond_nodes,
@@ -366,7 +382,6 @@ pub fn block2(chaining_value: [u32; 4]) -> ([u32; 4], [u32; 16], [u32; 16]) {
             );
         }
     }
-    panic!("Block 2 failed");
 }
 
 fn md5step(
@@ -376,26 +391,25 @@ fn md5step(
     out1: &mut [u32; 68],
     j: usize,
 ) {
-    let mut t;
-    let mut t1;
-    t = out[j]
-        .wrapping_add(cover_func(out[j + 3], out[j + 2], out[j + 1], j))
+    // calculating step j of md5
+    let mut first = out[j]
+        .wrapping_add(get_md5_round_func(out[j + 3], out[j + 2], out[j + 1], j))
         .wrapping_add(m_block[md5_values::MMAP[j] as usize])
         .wrapping_add(md5_values::TMAP[j]);
-    t1 = t >> (32 - md5_values::SMAP[j]);
-    t1 = out[j + 3].wrapping_add((t << md5_values::SMAP[j]).wrapping_add(t1));
-    out[j + 4] = t1;
-    t = out1[j]
-        .wrapping_add(cover_func(out1[j + 3], out1[j + 2], out1[j + 1], j))
+    let mut second = first >> (32 - md5_values::SMAP[j]);
+    second = out[j + 3].wrapping_add((first << md5_values::SMAP[j]).wrapping_add(second));
+    out[j + 4] = second;
+    first = out1[j]
+        .wrapping_add(get_md5_round_func(out1[j + 3], out1[j + 2], out1[j + 1], j))
         .wrapping_add(m_prime_block[md5_values::MMAP[j] as usize])
         .wrapping_add(md5_values::TMAP[j]);
-    t1 = t >> (32 - md5_values::SMAP[j]);
-    t1 = out1[j + 3].wrapping_add((t << md5_values::SMAP[j]).wrapping_add(t1));
-    out1[j + 4] = t1;
+    second = first >> (32 - md5_values::SMAP[j]);
+    second = out1[j + 3].wrapping_add((first << md5_values::SMAP[j]).wrapping_add(second));
+    out1[j + 4] = second;
 }
 
 #[allow(unused_assignments)]
-fn multi_msg_2(
+fn multi_msg(
     m_block: &mut [u32; 16],
     m_prime_block: &mut [u32; 16],
     q_cond_nodes: &mut [u32; 68],
