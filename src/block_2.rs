@@ -132,17 +132,21 @@ fn modif_for_cond(q_cond_nodes: &mut [u32; 68], q_index: i32, cond: [[u32; 3]; 3
 }
 
 #[inline]
-fn md5_rr(var: u32, num: i32) -> u32 {
-    let temp: u32 = var >> num;
-    return (var << (32 - num)) | temp;
+fn md5_rr(x: u32, y: i32) -> u32 {
+    let z: u32 = x >> y;
+    return (x << (32 - y)) | z;
 }
 #[inline]
-fn md5_rl(var: u32, num: i32) -> u32 {
-    let temp: u32 = var << num;
-    return (var >> (32 - num)) | temp;
+fn md5_rl(x: u32, y: i32) -> u32 {
+    let z: u32 = x << y;
+    return (x >> (32 - y)) | z;
 }
 
-fn recalc_0_15(q_cond_nodes: &mut [u32; 68], m_block: &mut [u32; 16], m_prime_block: &mut [u32; 16]) {
+fn recalc_0_15(
+    q_cond_nodes: &mut [u32; 68],
+    m_block: &mut [u32; 16],
+    m_prime_block: &mut [u32; 16],
+) {
     for i in 4..20 {
         m_block[i - 4] = md5_rr(
             q_cond_nodes[i].wrapping_sub(q_cond_nodes[i - 1]),
@@ -201,8 +205,6 @@ fn md5_20_steps(
     b = vals1[3];
     c = vals1[2];
     d = vals1[1];
-    // t;
-    // t1;
     for j in 0..16 {
         t = a
             .wrapping_add((b & c) | ((!b) & d))
@@ -296,6 +298,10 @@ pub fn block2(chaining_value: [u32; 4]) -> ([u32; 4], [u32; 16], [u32; 16]) {
     q_cond_nodes[2] = chaining_value[2];
     q_cond_nodes[3] = chaining_value[1];
 
+    for i in 4..20 {
+        q_cond_nodes[i] = rng.gen();
+    }
+
     q_prime[0] = q_cond_nodes[0] ^ (0x80000000);
     q_prime[1] = q_cond_nodes[1] ^ (0x82000000);
     q_prime[2] = q_cond_nodes[2] ^ (0x86000000);
@@ -305,13 +311,12 @@ pub fn block2(chaining_value: [u32; 4]) -> ([u32; 4], [u32; 16], [u32; 16]) {
 
     let mut msg_found = false;
     while !msg_found {
-        let mut c = true;
-
         let mut m_block: [u32; 16] = [0; 16];
         let mut m_prime_block: [u32; 16] = [0; 16];
-        while c {
-            let mut b = true;
-            while b {
+        loop {
+            while !((q_cond_nodes[19] ^ q_prime[19]) == 0xa0000000
+                && verify_conditions(q_cond_nodes, 0, 274, cond))
+            {
                 for i in 4..20 {
                     q_cond_nodes[i] = rng.gen();
                 }
@@ -324,19 +329,17 @@ pub fn block2(chaining_value: [u32; 4]) -> ([u32; 4], [u32; 16], [u32; 16]) {
                         &mut m_prime_block,
                         &mut q_prime,
                     );
-                    if (q_cond_nodes[19] ^ q_prime[19]) == 0xa0000000 {
-                        if verify_conditions(q_cond_nodes, 0, 274, cond) {
-                            b = false;
-                        }
-                    }
                 }
             }
-
-            b = true;
-            let mut number: i32 = 0;
-            while b {
-                number += 1;
-
+            let mut count = 0;
+            while !(((q_cond_nodes[19] ^ q_prime[19]) == 0xa0000000)
+                && ((q_cond_nodes[24] ^ q_prime[24]) == 0x80000000)
+                && verify_conditions(q_cond_nodes, 0, 286, cond))
+            {
+                count += 1;
+                if count >= 0x10000 {
+                    break;
+                }
                 q_cond_nodes[5] = rng.gen();
                 q_cond_nodes[4] = rng.gen();
                 modif_for_cond(&mut q_cond_nodes, 2, cond);
@@ -347,17 +350,10 @@ pub fn block2(chaining_value: [u32; 4]) -> ([u32; 4], [u32; 16], [u32; 16]) {
                     &mut m_prime_block,
                     &mut q_prime,
                 );
-                if number == 0x10000 {
-                    b = false;
-                }
+            }
 
-                if ((q_cond_nodes[19] ^ q_prime[19]) == 0xa0000000)
-                    && ((q_cond_nodes[24] ^ q_prime[24]) == 0x80000000)
-                    && verify_conditions(q_cond_nodes, 0, 286, cond)
-                {
-                    c = false;
-                    b = false;
-                }
+            if count < 0x10000 {
+                break;
             }
         }
 
